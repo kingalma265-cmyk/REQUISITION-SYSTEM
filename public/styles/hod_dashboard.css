@@ -89,7 +89,11 @@ tr:hover {
 
 /* Currency Styling */
 .amount {
+<<<<<<< HEAD
     font-family: 'Courier New', monospace; /* Monospace keeps decimals aligned */
+=======
+    font-family: 'Courier New', monospace; 
+>>>>>>> fc765db (Commiting latest changes to the main branch)
     font-weight: 600;
     color: #059669; /* Green for money */
     text-align: right;

@@ -1,14 +1,40 @@
+    require('dotenv').config();
     const express = require('express');
     const session = require('express-session');
     const bcrypt = require('bcrypt');
-    const db = require('./config/db');
-    const formidable = require('formidable');
-    const path = require('path');
+const crypto = require('crypto');
+const db = require('./config/db');
+const formidable = require('formidable');
+const path = require('path');
+const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
+    const ejs = require('ejs');
     const http = require('http');
+    const html_to_pdf = require('html-pdf-node');
+    
+    // Load and encode logo as base64 for embedding in PDFs
+    const fs = require('fs');
+    const bitmap = fs.readFileSync(path.join(__dirname, 'public/Images/octagon-logo.png'));
+    const logoBase64 = Buffer.from(bitmap).toString('base64');
 
+        
     const app = express();
     const hostname = '127.0.0.1';
     const port = process.env.PORT || 3000;
+    const multer = require('multer');
+    const { triggerWorkflowEmail } = require('./utils/notifications');
+    
+
+    // Configure how files are stored
+    const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/signatures/'); // Make sure this folder exists!
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
+    const upload = multer({ storage: storage });
 
     // Helper function to parse requisition data
     function parseRequisition(requisition) {
@@ -28,6 +54,25 @@
         } else {
             parsed.items = [];
         }
+
+        parsed.items = parsed.items.map(item => {
+            const normalizedItem = {
+                ...item,
+                qty: Number(item.qty) || 0,
+                unitPrice: Number(item.unitPrice) || 0,
+                total: Number(item.total) || 0,
+                vat: Number(item.vat) || 0,
+                costCentre: item.costCentre || item.costCentre === '' ? item.costCentre : 'N/A'
+            };
+
+            if (!normalizedItem.vat && normalizedItem.qty && normalizedItem.unitPrice && normalizedItem.total) {
+                const base = normalizedItem.qty * normalizedItem.unitPrice;
+                const computedVat = normalizedItem.total - base;
+                normalizedItem.vat = Number(computedVat.toFixed(2));
+            }
+
+            return normalizedItem;
+        });
         
         // Parse history
         if (parsed.history) {
@@ -45,16 +90,32 @@
         return parsed;
     }
 
-    // 1. SETTINGS
+    //SETTINGS
     app.set('view engine', 'ejs');
     app.set('views', path.join(__dirname, 'views'));
 
-    // 2. STANDARD MIDDLEWARE
+    //STANDARD MIDDLEWARE
     app.use(express.static('public'));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
     app.use(express.json({ limit: '50mb' }));
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+    app.use(express.urlencoded({ extended: true }));
 
-    // 3. SESSION INITIALIZATION
+    const ensureResetColumns = async () => {
+        try {
+            await db.execute(`ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS _password_token VARCHAR(255) DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS reset_password_expires DATETIME DEFAULT NULL`
+            );
+            console.log('DB: ensured password reset columns exist.');
+        } catch (migrationError) {
+            console.warn('DB: password reset column migration failed or already exists:', migrationError.message || migrationError);
+        }
+    };
+
+    ensureResetColumns();
+    
+    //SESSION INITIALIZATION
     app.use(session({
         secret: 'octagon_secret_key_2026',
         resave: false,
@@ -67,23 +128,23 @@
         name: 'octagon_session'
     }));
 
-    // 4. GLOBAL MIDDLEWARE
-   // index.js - Section 4: GLOBAL MIDDLEWARE
+    //GLOBAL MIDDLEWARE
+   
         app.use((req, res, next) => {
             res.locals.user = (req.session && req.session.userId) ? 
                 { 
                     username: req.session.username, 
                     role: req.session.role,
-                    department: req.session.department, // Ensure this is stored in session during login
+                    department: req.session.department,
                     id: req.session.userId 
                 } : null;
-            // ... rest of middleware
+            
             next();
         });
 
 
         
-    // 5. ACCESS CONTROL MIDDLEWARE
+    // ACCESS CONTROL MIDDLEWARE
     const isAuthenticated = (req, res, next) => {
         if (req.session && req.session.userId) {
             return next();
@@ -92,6 +153,8 @@
         res.redirect('/login');
     };
 
+
+//Authorize role
     const authorize = (role) => {
         return (req, res, next) => {
             if (req.session && req.session.role === role) {
@@ -99,7 +162,7 @@
             }
             res.status(403).send(`
                 <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
-                    <h1 style="color:#b91c1c;">Access Denied</h1>
+                    <h1 style="color:#b91c1c;font-family:sans-serif;font-size:24px;">Access Denied!!</h1>
                     <p>You do not have permission to view the ${role} dashboard.</p>
                     <p>Your role: ${req.session?.role || 'Not logged in'}</p>
                     <a href="/">Go Back to Home</a>
@@ -121,57 +184,243 @@
         }
     }
 
-    // 6. AUTHENTICATION ROUTES
-    app.get('/login', (req, res) => {
-        if (req.session && req.session.userId) {
-            return redirectToDashboard(req.session.role, res);
+    // AUTHENTICATION ROUTES
+    //Login
+//     app.get('/login', (req, res) => {
+//     if (req.session && req.session.userId) {
+//         return redirectToDashboard(req.session.role, res);
+//     }
+//     res.render('login', { error: null });
+// });
+
+app.get('/login', (req, res) => {
+    if (req.session && req.session.userId) {
+        return redirectToDashboard(req.session.role, res);
+    }
+    res.render('login', { error: null });
+});
+
+app.post('/login', async (req, res) => {
+    // 1. Get email and password from the form, trim whitespace
+    const { email, password } = req.body;
+    const trimmedEmail = email ? email.trim() : '';
+    const trimmedPassword = password ? password.trim() : '';
+
+    console.log('\n=================================');
+    console.log(`Login attempt for: ${trimmedEmail}`);
+    console.log('=================================');
+    
+    // Check if input exists
+    if (!trimmedEmail || !trimmedPassword) {
+        return res.render('login', { error: "Please enter both email and password" });
+    }
+    
+    try {
+        // 2. Query the DB using email only
+        const [rows] = await db.execute(
+            'SELECT * FROM users WHERE email = ?',
+            [trimmedEmail]
+        );
+        const user = rows[0];
+        
+        if (!user) {
+            console.log(`❌ User not found for email: ${trimmedEmail}`);
+            return res.render('login', { error: "Invalid email or password" });
         }
-        res.render('login', { error: null });
+        
+        // Check if password hash exists
+        if (!user.password_hash) {
+            console.log(`❌ No password hash for user: ${trimmedEmail}. Run hash-password.js to set up users.`);
+            return res.render('login', { error: "Account not properly initialized. Contact administrator." });
+        }
+        
+        // 3. Compare passwords
+        const passwordMatch = await bcrypt.compare(trimmedPassword, user.password_hash);
+        console.log(`Password match: ${passwordMatch}`);
+        
+        if (passwordMatch) {
+            
+            // This turns "brian.wekesa@octagonafrica.com" into "Brian Wekesa"
+            const displayName = trimmedEmail.split('@')[0]
+                .split('.')
+                .map(name => name.charAt(0).toUpperCase() + name.slice(1))
+                .join(' ');
+
+            req.session.userId = user.id;
+            req.session.role = user.role;
+            
+            // FIX: Explicitly save the lowercase username for database query consistency (e.g. "brian.wekesa")
+            req.session.username = user.username; 
+            
+            // NEW: Add a separate variable strictly for UI layout headers/welcomes
+            req.session.displayName = displayName; 
+            
+            req.session.department = user.department;
+
+            // Save the user's signature path directly into the session 
+            req.session.signaturePath = user.signature_path || null;
+
+            if (user.must_reset_password) {
+                return res.redirect('/change-password');
+            }
+
+            console.log(`✅ Login successful for database identity: ${user.username} (${displayName})`);
+            
+            const returnTo = req.session.returnTo || '/';
+            delete req.session.returnTo;
+            return redirectToDashboard(user.role, res);
+        }
+        
+        console.log('❌ Invalid password');
+        res.render('login', { error: "Invalid email or password" });
+        
+    } catch (err) {
+        console.error('❌ Login error:', err);
+        res.render('login', { error: "A server error occurred. Please try again." });
+    }
+});
+const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
+
+
+
+//const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
+    // Forgot Password - Display form
+    app.get('/forgot-password', (req, res) => {
+        res.render('forgot_password', { error: null, message: null });
     });
 
-    app.post('/login', async (req, res) => {
-        const { username, password } = req.body;
-        
-        console.log('\n=================================');
-        console.log(`Login attempt for: ${username}`);
-        console.log('=================================');
-        
-        if (!username || !password) {
-            return res.render('login', { error: "Please enter both username and password" });
+    // Forgot Password - Handle form submission
+    app.post('/forgot-password', async (req, res) => {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.render('forgot_password', { error: 'Please enter your email address', message: null });
         }
-        
+
         try {
-            const [rows] = await db.execute('SELECT * FROM users WHERE username = ?', [username]);
+            const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
             const user = rows[0];
-            
+
             if (!user) {
-                console.log('User not found');
-                return res.render('login', { error: "Invalid username or password" });
+                return res.render('forgot_password', { error: null, message: 'If an account exists for this email, a reset link has been sent.' });
             }
-            
-            console.log(`User found: ${user.username} (${user.role})`);
-            const passwordMatch = await bcrypt.compare(password, user.password_hash);
-            console.log(`Password match: ${passwordMatch}`);
-            
-            if (passwordMatch) {
-                req.session.userId = user.id;
-                req.session.role = user.role;
-                req.session.username = user.username;
-                console.log(`✅ Login successful for: ${username}`);
-                const returnTo = req.session.returnTo || '/';
-                delete req.session.returnTo;
-                return redirectToDashboard(user.role, res);
+
+            const resetToken = crypto.randomBytes(32).toString('hex');
+            const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+            const resetLink = `${appBaseUrl}/reset-password/${resetToken}`;
+
+            await db.execute(
+                'UPDATE users SET reset_password_token = ?, reset_password_expires = ? WHERE id = ?',
+                [resetToken, resetExpires, user.id]
+            );
+
+            const emailResult = await sendPasswordResetEmail(user.email, resetLink);
+            if (!emailResult.success) {
+                console.error('Error sending password reset email:', emailResult.error);
             }
-            
-            console.log('❌ Invalid password');
-            res.render('login', { error: "Invalid username or password" });
-            
+
+            res.render('forgot_password', { error: null, message: ' A reset link has been sent to your email address.' });
+
         } catch (err) {
-            console.error('❌ Login error:', err);
-            res.render('login', { error: "A server error occurred. Please try again." });
+            console.error('Forgot password error:', err);
+            res.render('forgot_password', { error: 'An error occurred. Please try again.', message: null });
         }
     });
 
+    app.get('/reset-password/:token', async (req, res) => {
+        const { token } = req.params;
+
+        try {
+            const [rows] = await db.execute(
+                'SELECT * FROM users WHERE reset_password_token = ? AND reset_password_expires > NOW()',
+                [token]
+            );
+            const user = rows[0];
+
+            if (!user) {
+                return res.render('reset_password', { error: 'Reset link is invalid or has expired.', formAction: '/change-password', token: '' });
+            }
+
+            res.render('reset_password', { error: null, formAction: `/reset-password/${token}`, token });
+        } catch (err) {
+            console.error('Reset password token validation error:', err);
+            res.render('reset_password', { error: 'An error occurred. Please try again.', formAction: '/change-password', token: '' });
+        }
+    });
+
+    app.post('/reset-password/:token', async (req, res) => {
+        const { token } = req.params;
+        const { password, confirmPassword } = req.body;
+
+        if (!password || !confirmPassword) {
+            return res.render('reset_password', { error: 'Please fill in both password fields.', formAction: `/reset-password/${token}`, token });
+        }
+
+        if (password !== confirmPassword) {
+            return res.render('reset_password', { error: 'Passwords do not match.', formAction: `/reset-password/${token}`, token });
+        }
+
+        if (password.length < 8) {
+            return res.render('reset_password', { error: 'Password must be at least 8 characters long.', formAction: `/reset-password/${token}`, token });
+        }
+
+        try {
+            const [rows] = await db.execute(
+                'SELECT * FROM users WHERE reset_password_token = ? AND reset_password_expires > NOW()',
+                [token]
+            );
+            const user = rows[0];
+
+            if (!user) {
+                return res.render('reset_password', { error: 'Reset link is invalid or has expired.', formAction: '/change-password', token: '' });
+            }
+
+            const passwordHash = await bcrypt.hash(password, 10);
+            await db.execute(
+                'UPDATE users SET password_hash = ?, must_reset_password = 0, reset_password_token = NULL, reset_password_expires = NULL WHERE id = ?',
+                [passwordHash, user.id]
+            );
+
+            res.redirect('/login');
+        } catch (err) {
+            console.error('Reset password update error:', err);
+            res.render('reset_password', { error: 'Unable to update password. Please try again.', formAction: `/reset-password/${token}`, token });
+        }
+    });
+
+    app.get('/change-password', isAuthenticated, (req, res) => {
+        res.render('reset_password', { error: null, formAction: '/change-password' });
+    });
+
+    app.post('/change-password', isAuthenticated, async (req, res) => {
+        const { password, confirmPassword } = req.body;
+
+        if (!password || !confirmPassword) {
+            return res.render('reset_password', { error: 'Please fill in both password fields.', formAction: '/change-password' });
+        }
+
+        if (password !== confirmPassword) {
+            return res.render('reset_password', { error: 'Passwords do not match.', formAction: '/change-password' });
+        }
+
+        if (password.length < 8) {
+            return res.render('reset_password', { error: 'Password must be at least 8 characters long.', formAction: '/change-password' });
+        }
+
+        try {
+            const passwordHash = await bcrypt.hash(password, 10);
+            await db.execute(
+                'UPDATE users SET password_hash = ?, must_reset_password = 0 WHERE id = ?',
+                [passwordHash, req.session.userId]
+            );
+            res.redirect('/home');
+        } catch (err) {
+            console.error('Password update error:', err);
+            res.render('reset_password', { error: 'Unable to update password. Please try again.', formAction: '/change-password' });
+        }
+    });
+
+    //Logout
     app.get('/logout', (req, res) => {
         req.session.destroy((err) => {
             if (err) {
@@ -182,21 +431,24 @@
         });
     });
 
-    // 7. ROOT ROUTE
+    // ROOT ROUTE
     app.get('/', isAuthenticated, (req, res) => {
         redirectToDashboard(req.session.role, res);
     });
 
-    // 8. STAFF ROUTES
+    // STAFF ROUTES
     app.get('/home', isAuthenticated, async (req, res) => {
         try {
             const [rows] = await db.execute(
-                'SELECT id, staffName, department, requestDate, status FROM requisitions ORDER BY requestDate DESC LIMIT 10'
+                'SELECT * FROM requisitions ORDER BY requestDate DESC LIMIT 50'
             );
+            
+            // Parse JSON fields like history and items using existing helper
+            const parsedRows = rows.map(r => parseRequisition(r));
+            
             res.render('index', { 
                 currentPage: 'new', 
-                user: req.session.username, 
-                requisitions: rows
+                requisitions: parsedRows
             });
         } catch (error) {
             console.error('Error loading home page:', error);
@@ -209,56 +461,112 @@
         }
     });
 
-  app.post('/requisition/submit-to-hod', isAuthenticated, async (req, res) => {
+//submit
+ app.post('/requisition/submit-to-hod', isAuthenticated, async (req, res) => {
     try {
-        // Match names exactly as they appear in your HTML
-       const { requestDate, department, grandTotal, staffName } = req.body;
+        const { requestDate, department, grandTotal, staffName } = req.body;
+        
+        // 1. Properly declare variables at the top of the scope
+        let newStatus = 'PENDING_HOD'; 
+        let workflowStage = 'Prepared';
+        const userRole = req.session.role; // Ensure this is set during login
 
-// Normalize fields (ensure arrays)
-const budgetLines = Array.isArray(req.body.budgetLine) ? req.body.budgetLine : [req.body.budgetLine];
-const costCentres = Array.isArray(req.body.costCentre) ? req.body.costCentre : [req.body.costCentre];
-const descriptions = Array.isArray(req.body.description) ? req.body.description : [req.body.description];
-const qtys = Array.isArray(req.body.qty) ? req.body.qty : [req.body.qty];
-const units = Array.isArray(req.body.unit) ? req.body.unit : [req.body.unit];
-const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total];
+        // 2. Determine workflow path
+        if (userRole === 'hod') {
+            newStatus = 'PENDING_DIRECTOR';
+            workflowStage = 'Prepared by HOD (Sent to Director)';
+        }
 
-// Build items correctly (index-based mapping)
+        if (userRole === 'finance') {
+            newStatus = 'PENDING_DIRECTOR';
+            workflowStage = 'Prepared by Finance (Sent to Director)';
+        }
+
+
+        // Normalize fields (ensure arrays)
+        const descriptions = Array.isArray(req.body.description) ? req.body.description : [req.body.description];
+        const budgetLines = Array.isArray(req.body.budgetLine) ? req.body.budgetLine : [req.body.budgetLine];
+        const costCentres = Array.isArray(req.body.costCentre) ? req.body.costCentre : [req.body.costCentre];
+        const qtys = Array.isArray(req.body.qty) ? req.body.qty : [req.body.qty];
+        const units = Array.isArray(req.body.unit) ? req.body.unit : [req.body.unit];
+        const vats = Array.isArray(req.body.VAT) ? req.body.VAT : [req.body.VAT];
+        const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total];
+
+        // Server-side validation: Ensure every item has a description and a valid price
+        for (let i = 0; i < descriptions.length; i++) {
+            if (!descriptions[i] || (typeof descriptions[i] === 'string' && descriptions[i].trim() === '')) {
+                return res.status(400).send(`Validation Error: Item #${i + 1} is missing a description.`);
+            }
+            if (!units[i] || isNaN(units[i]) || Number(units[i]) <= 0) {
+                return res.status(400).send(`Validation Error: Item #${i + 1} must have a unit price greater than 0.`);
+            }
+        }
+
         const items = descriptions.map((desc, i) => ({
             budgetLine: budgetLines[i] || '',
             costCentre: costCentres[i] || '',
-            description: desc || '',
+            description: desc || '',    
             qty: Number(qtys[i]) || 0,
             unitPrice: Number(units[i]) || 0,
+            vat: Number(vats[i]) || 0,
             total: Number(totals[i]) || 0
         }));
-        console.log(items)
 
         const history = [{ 
-            stage: 'Prepared', 
+            stage: workflowStage, 
             date: new Date().toISOString(), 
-            user: req.session.username 
+            user: req.session.username,
+            timestamp: Date.now()
         }];
 
-        await db.execute(
+        // 3. Database Insert
+        const [result] = await db.execute(
             'INSERT INTO requisitions (staffName, requestDate, department, items, grandTotal, status, history) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [staffName || req.session.username, requestDate || new Date(), department, JSON.stringify(items), grandTotal, 'PENDING_HOD', JSON.stringify(history)]
+            [
+                staffName || req.session.username, 
+                requestDate || new Date(), 
+                department, 
+                JSON.stringify(items), 
+                grandTotal, 
+                newStatus, 
+                JSON.stringify(history)
+            ]
         );
 
+        const requisitionId = result.insertId;
+       // const newStatus = status === 'PENDING_HOD' ? 'PENDING_DIRECTOR' : 'PENDING_HOD';
+        
+        // 4. Trigger Email
+        try {
+            await triggerWorkflowEmail(requisitionId, newStatus);
+        } catch (mailErr) {
+            console.error('❌ Email Notification Failed:', mailErr.message);
+        }
+        
         res.redirect('/home?success=Requisition submitted successfully');
+
     } catch (error) {
         console.error('Error saving requisition:', error);
         res.status(500).send(`Error saving requisition: ${error.message}`);
     }
+    
 });
-    // 9. HOD ROUTES
+
+
+
+
+    //HOD ROUTES
     app.get('/hod/dashboard', isAuthenticated, authorize('hod'), async (req, res) => {
         try {
+            console.log("HOD User:", req.session.username);
+            console.log("Looking for Department:", req.session.department);
+
             const [rows] = await db.execute(
-                'SELECT * FROM requisitions WHERE status = ? ORDER BY requestDate DESC',
-                ['PENDING_HOD']
+                'SELECT * FROM requisitions WHERE department = ? ORDER BY requestDate DESC',
+                [req.session.department]
             );
             
-            const parsedRequests = rows.map(req => {
+            const allDepartmentRequisitions = rows.map(req => {
                 const parsed = parseRequisition(req);
                 parsed.totalAmount = parsed.items.reduce((sum, item) => {
                     return sum + (Number(item.total) || Number(item.qty) * Number(item.unitPrice) || 0);
@@ -266,17 +574,30 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
                 parsed.daysPending = Math.ceil((new Date() - new Date(parsed.requestDate)) / (1000 * 60 * 60 * 24));
                 return parsed;
             });
-            
-            const totalPending = parsedRequests.length;
-            const highValueItems = parsedRequests.filter(r => r.totalAmount > 100000).length;
-            const urgentRequests = parsedRequests.filter(r => r.daysPending > 3).length;
+
+            // Filter for specific categories for display on the dashboard
+            const pendingHODRequisitions = allDepartmentRequisitions.filter(r => r.status === 'PENDING_HOD');
+            const rejectedRequisitions = allDepartmentRequisitions.filter(r => r.status.startsWith('REJECTED'));
+            const approvedRequisitions = allDepartmentRequisitions.filter(r => r.status === 'APPROVED');
+            const inProgressRequisitions = allDepartmentRequisitions.filter(r => 
+                r.status !== 'PENDING_HOD' && !r.status.startsWith('REJECTED') && r.status !== 'APPROVED'
+            );
+
+            // Recalculate stats based on the full set of department requisitions
+            const totalDepartmentRequisitions = allDepartmentRequisitions.length;
+            const highValueItems = allDepartmentRequisitions.filter(r => r.totalAmount > 100000).length;
+            const urgentRequests = allDepartmentRequisitions.filter(r => r.daysPending > 3 && r.status === 'PENDING_HOD').length; // Urgent only for pending HOD
             
             res.render('hod_dashboard', { 
-                requisitions: parsedRequests,
+                requisitions: allDepartmentRequisitions,
+                pendingHODRequisitions: pendingHODRequisitions,
+                rejectedRequisitions: rejectedRequisitions, // New: for a separate section
+                approvedRequisitions: approvedRequisitions, // New: for a separate section
+                inProgressRequisitions: inProgressRequisitions, // New: for a separate section
                 stats: {
-                    total: totalPending,
-                    highValue: highValueItems,
-                    urgent: urgentRequests
+                    total: totalDepartmentRequisitions,
+                    highValue: highValueItems, // High value across all department requisitions
+                    urgent: urgentRequests // Urgent only for pending HOD
                 },
                 currentPage: 'hod',
                 user: req.session.username,
@@ -286,7 +607,10 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
         } catch (error) {
             console.error('Error loading HOD dashboard:', error);
             res.render('hod_dashboard', { 
-                requests: [], 
+                pendingHODRequisitions: [],
+                rejectedRequisitions: [],
+                approvedRequisitions: [],
+                inProgressRequisitions: [],
                 role: 'hod',
                 department: req.session.department || 'General',
                 stats: { total: 0, highValue: 0, urgent: 0 },
@@ -296,7 +620,7 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
             });
         }
     });
-
+//HOD APPROVAL FORM
     app.get('/hod/approval/:id', isAuthenticated, authorize('hod'), async (req, res) => {
         try {
             const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [req.params.id]);
@@ -329,7 +653,6 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
                     history: requisition.history || []
                 },
                 currentPage: 'hod',
-                user: req.session.username,
                 role: 'hod'
             });
             
@@ -337,11 +660,14 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
             console.error('Error loading approval form:', error);
             res.status(500).send(`Error loading requisition: ${error.message}`);
         }
+
     });
 
-    app.post('/hod/submit-approval/:id', isAuthenticated, authorize('hod'), async (req, res) => {
+
+    app.post('/hod/submit-approval/:id', isAuthenticated, authorize('hod'), upload.single('signature_file'), async (req, res) => {
         const { id } = req.params;
-        const { action, comments, signature } = req.body;
+        const { action, comments } = req.body || {};
+        const signaturePath = req.file ? `/uploads/signatures/${req.file.filename}` : null;
         
         console.log('Processing HOD approval:', { id, action });
         
@@ -349,7 +675,7 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
             return res.status(400).send("Invalid action. Must be 'approve' or 'reject'.");
         }
         
-        if (!signature) {
+        if (!req.file && action === 'approve') {
             return res.status(400).send("Signature is required.");
         }
         
@@ -384,7 +710,7 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
                 action: action === 'approve' ? 'Approved' : 'Rejected',
                 date: new Date().toISOString(),
                 user: req.session.username,
-                signature: signature.substring(0, 100),
+                signature: signaturePath,
                 timestamp: Date.now()
             };
             
@@ -395,9 +721,15 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
             history.push(historyEntry);
             
             const updateQuery = 'UPDATE requisitions SET status = ?, hodSignature = ?, history = ? WHERE id = ?';
-            const updateValues = [newStatus, signature, JSON.stringify(history), id];
+            const updateValues = [newStatus, signaturePath, JSON.stringify(history), id];
             
             await db.execute(updateQuery, updateValues);
+
+            try {
+                await triggerWorkflowEmail(id, newStatus);
+            } catch (mailErr) {
+                console.error('❌ Email Notification Failed:', mailErr.message);
+            }
             
             console.log(`✅ HOD ${action}d requisition ${id}`);
             
@@ -411,9 +743,11 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
             console.error('❌ Error processing HOD approval:', error);
             res.status(500).send(`Error processing approval: ${error.message}`);
         }
+
+       
     });
 
-
+// FINANCE ROUTES
     app.get('/finance/dashboard', isAuthenticated, authorize('finance'), async (req, res) => { 
         try { 
             // Get pending finance requisitions 
@@ -427,8 +761,12 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
                 'SELECT * FROM requisitions ORDER BY requestDate DESC' 
             ); 
             
+            // This query in your /director/dashboard route will now catch Finance requests too
+            const [pending] = await db.execute(
+                'SELECT * FROM requisitions WHERE status = "PENDING_DIRECTOR" ORDER BY requestDate DESC'
+            );
 
-            // Get department statistics
+            //  department statistics
             const [deptStats] = await db.execute(`
                 SELECT 
                     department,
@@ -441,7 +779,7 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
                 GROUP BY department
                 ORDER BY totalValue DESC
             `);
-            // Get unique departments for filter
+            //  unique departments for filter
             const [deptList] = await db.execute('SELECT DISTINCT department FROM requisitions WHERE department IS NOT NULL AND department != ""');
             const departments = deptList.map(d => d.department);
             
@@ -476,14 +814,14 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
             }; 
             
         res.render('finance_dashboard', { 
+            
             requisitions: parsedPending,
             allRequisitions: parsedAll,
             highValue: parsedAll.filter(r => r.grandTotal > 100000).length,
             departmentStats: deptStats,
-            departments: departments,  // Add this line
+            departments: departments,
             stats: stats,
-            currentPage: 'finance',
-            user: req.session.username
+            currentPage: 'finance'
         });
         } catch (error) { 
             console.error('Error loading finance dashboard:', error); 
@@ -507,7 +845,7 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
 
 
 
-
+//Finance APPROVAL FORM
     app.get('/finance/approval/:id', isAuthenticated, authorize('finance'), async (req, res) => {
         try {
             const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [req.params.id]);
@@ -519,7 +857,6 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
             res.render('approve_form', { 
                 requisition: reqData, 
                 currentPage: 'finance',
-                user: req.session.username,
                 role: 'finance'
             });
         } catch (error) {
@@ -528,55 +865,101 @@ const totals = Array.isArray(req.body.total) ? req.body.total : [req.body.total]
         }
     });
 
-    app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), async (req, res) => {
-        const { id } = req.params;
-        const { signature, action, comments } = req.body;
-        const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED_BY_FINANCE';
+// Director Dashboard Route
+
+app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), upload.single('signature_file'), async (req, res) => {
+    const { id } = req.params;
+    const { action, comments } = req.body || {};
+    const signaturePath = req.file ? `/uploads/signatures/${req.file.filename}` : null;
+    
+    if (action === 'approve' && !signaturePath) {
+        return res.status(400).send("Signature file is required for finance approval.");
+    }
+
+    try {
+        // 1. Fetch requisition AND required user data explicitly (Using Email/Username mapping safely)
+        // Adjust the ON clause if your 'requisitions' table tracks creator via 'staffEmail' or 'userId'
+        const [rows] = await db.execute(`
+            SELECT 
+                r.*, 
+                u.role AS requesterRole, 
+                u.email AS requesterEmail, 
+                u.username AS requesterName
+            FROM requisitions r 
+            JOIN users u ON r.staffName = u.username 
+            WHERE r.id = ?`, [id]);
+
+        if (rows.length === 0) return res.status(404).send("Requisition not found");
         
-        try {
-            const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [id]);
-            if (rows.length === 0) return res.status(404).send("Requisition not found");
-            
-            let history = [];
-            try {
-                history = typeof rows[0].history === 'string' ? JSON.parse(rows[0].history || '[]') : rows[0].history || [];
-            } catch(e) {
-                history = [];
+        const { requesterRole, requesterEmail, requesterName } = rows[0];
+        let newStatus;
+
+        
+        if (action === 'approve') {
+            if (requesterRole === 'staff') {
+                // Regular staff process ends here at Finance
+                newStatus = 'APPROVED'; 
+            } else {
+                // HODs and Finance staff must go to the Director for final sign-off
+                newStatus = 'PENDING_DIRECTOR';
             }
-            
-            history.push({
-                stage: action === 'approve' ? 'Approved by Finance' : 'Rejected by Finance',
-                date: new Date().toISOString(),
-                user: req.session.username,
-                comments: comments || '',
-                signature: signature || ''
-            });
-            
-            await db.execute(
-                'UPDATE requisitions SET status = ?, financeSignature = ?, history = ? WHERE id = ?',
-                [newStatus, signature || 'approved', JSON.stringify(history), id]
-            );
-            
-            res.redirect('/finance/dashboard?success=Finance approval submitted');
-        } catch (error) {
-            console.error('Error processing finance approval:', error);
-            res.status(500).send(`Error processing approval: ${error.message}`);
+        } else {
+            newStatus = 'REJECTED_BY_FINANCE';
         }
-    });
 
-    // 11. DIRECTOR ROUTES
-    // 11. DIRECTOR ROUTES
+        // 3. Handle History
+        let history = [];
+        try {
+            history = typeof rows[0].history === 'string' ? JSON.parse(rows[0].history || '[]') : rows[0].history || [];
+        } catch(e) { 
+            history = []; 
+        }
+        
+        history.push({
+            stage: action === 'approve' ? 'Approved by Finance' : 'Rejected by Finance',
+            date: new Date().toISOString(),
+            action: action === 'approve' ? 'Approved' : 'Rejected',
+            user: req.session.email || req.session.username, // Fallback to email if username is phased out
+            comments: comments || '',
+            signature: signaturePath || ''
+        });
+        
+        // 4. Update Database
+        await db.execute(
+            'UPDATE requisitions SET status = ?, financeSignature = ?, history = ? WHERE id = ?',
+            [newStatus, signaturePath, JSON.stringify(history), id]
+        );
 
-    // Director Dashboard Route
-    // index.js - Section 11: DIRECTOR ROUTES
-    // index.js - Section 11: DIRECTOR ROUTES
-    // index.js - Section 11: DIRECTOR ROUTES
+        // 5. Trigger Emails (Now with fully defined variables)
+        try {
+            if (requesterEmail) {
+                // Formatting the reference display to follow standard identifier layout (e.g., OCT-6)
+                const displayId = String(id).startsWith('OCT-') ? id : `OCT-${id}`;
+                await triggerWorkflowEmail(displayId, newStatus, requesterEmail, requesterName);
+            }
+        } catch (mailErr) {
+            console.error('❌ Email Notification Failed:', mailErr.message);
+        }
 
-// 11. DIRECTOR ROUTES - UPDATED WITH DEBUGGING AND FORCED REFRESH
+        const successMsg = newStatus === '  APPROVED' 
+            ? 'Approved and forwarded to Director' 
+            : 'Finance approval completed';
 
-// Director Dashboard Route - WITH IMPROVED DEBUGGING
+        res.redirect(`/finance/dashboard?success=${encodeURIComponent(successMsg)}`);
+
+    } catch (error) {
+        console.error('Error processing finance approval:', error);
+        res.status(500).send(`Error processing approval: ${error.message}`);
+    }
+});
+
+
 app.get('/director/dashboard', isAuthenticated, authorize('director'), async (req, res) => {
     try {
+        //Requisitions pending director's approval
+            const [pending] = await db.execute(
+                'SELECT * FROM requisitions WHERE status = "PENDING_DIRECTOR" ORDER BY requestDate DESC'
+            );
         // 1. Get ALL approved requisitions for the table
         const [rows] = await db.execute(
             'SELECT * FROM requisitions WHERE status = ? ORDER BY requestDate DESC',
@@ -595,22 +978,21 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
             GROUP BY department
         `);
 
-        // 3. Process the table rows (Parsing JSON fields if necessary)
+        //  table rows (Parsing JSON fields for EJS rendering)
         const parsedRequests = rows.map(req => {
-            // Using your existing parseRequisition helper
+            
             const parsed = typeof parseRequisition === 'function' ? parseRequisition(req) : req;
             
-            // Ensure grandTotal is treated as a number for JS calculations
-           parsed.grandTotal = parseFloat(req.grandTotal) || 0;
+                  parsed.grandTotal = parseFloat(req.grandTotal) || 0;
             return parsed;
         });
 
-        // 4. Prepare data for Charts
+        // data for Charts
         const deptNames = deptRows.map(r => r.dept);
         const deptAmounts = deptRows.map(r => Number(r.totalAmount) || 0);
         const deptCounts = deptRows.map(r => r.reqCount);
 
-        // 5. Calculate High-Level Stats
+        //  High-Level Stats
         const totalSpendAll = deptAmounts.reduce((a, b) => a + b, 0);
         const highValueCount = parsedRequests.filter(r => r.grandTotal > 100000).length;
         const avgSpend = parsedRequests.length > 0 ? (totalSpendAll / parsedRequests.length).toFixed(0) : 0;
@@ -622,51 +1004,60 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
 
-        // 6. Render
+       
       // index.js - Inside the /director/dashboard route
-res.render('director_dashboard', { 
-    visibleRequisitions: parsedRequests,
-    requisitions: parsedRequests,
-    deptNames,
-    deptAmounts,
-    deptCounts,
-    stats: { 
-        total: parsedRequests.length, 
-        highValue: highValueCount,
-        totalSpend: totalSpendAll,
-        avgSpend: avgSpend
-    },
-    // Add this line to provide a global report timestamp
-    reportDate: new Date().toLocaleDateString('en-GB', { 
-        day: '2-digit', 
-        month: 'short', 
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    }),
-    user: req.session.username,
-    success: req.query.success,
-    error: req.query.error,
-    timestamp: Date.now() // Keep for cache busting
-});
+    res.render('director_dashboard', { 
+        pendingRequisitions: pending || [],
+        visibleRequisitions: parsedRequests,
+        requisitions: parsedRequests,
+        deptNames,
+        deptAmounts,
+        deptCounts,
+        stats: { 
+            total: parsedRequests.length, 
+            highValue: highValueCount,
+            totalSpend: totalSpendAll,
+            avgSpend: avgSpend
+        },
+        // Add this line to provide a global report timestamp
+        reportDate: new Date().toLocaleDateString('en-GB', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        }),
+        success: req.query.success,
+        error: req.query.error,
+        timestamp: Date.now() // Keep for cache busting
+    });
 
     } catch (error) {
         console.error('❌ Error loading director dashboard:', error);
         res.render('director_dashboard', { 
+            pendingRequisitions: pending || [],
             visibleRequisitions: [],
             requisitions: [],
             deptNames: [],
             deptAmounts: [],
             deptCounts: [],
             stats: { total: 0, highValue: 0, totalSpend: 0, avgSpend: 0 },
-            user: req.session.username,
             error: "Failed to load director analytics: " + error.message
         });
     }
 });
 
-    // Director Review Detail Route (THIS WAS MISSING A PROPER ROUTE DECLARATION)
+
+    // Director Review Detail Route 
+
+
+
+
     app.get('/director/review/:id', isAuthenticated, authorize('director'), async (req, res) => {
+        const requisitionId = req.params.id;
+       // const { action, comments } = req.body;
+        const { action, comments } = req.body || {}; 
+        const signatureFile = req.file; 
         try {
             const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [req.params.id]);
             
@@ -677,9 +1068,9 @@ res.render('director_dashboard', {
             const requisition = parseRequisition(rows[0]);
 
             res.render('director_review_detail', {
+                role: req.session.role,
                 requisition: requisition,
-                currentPage: 'director',
-                user: req.session.username
+                currentPage: 'director'
             });
         } catch (error) {
             console.error('Error loading director review page:', error);
@@ -687,47 +1078,82 @@ res.render('director_dashboard', {
         }
     });
 
-    // Director Approval Form
-    app.get('/director/approval/:id', isAuthenticated, authorize('director'), async (req, res) => {
-        try {
-            const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [req.params.id]);
-            if (!rows[0]) return res.status(404).send("Requisition not found");
-            
-            const requisition = parseRequisition(rows[0]);
-            
-            if (requisition.status !== 'PENDING_DIRECTOR') {
-                return res.status(400).send(`
-                    <div style="text-align:center; margin-top:50px;">
-                        <h2>Requisition Already Processed</h2>
-                        <p>Status: ${requisition.status}</p>
-                        <a href="/director/dashboard">Back to Dashboard</a>
-                    </div>
-                `);
-            }
-            
-            const subtotal = requisition.items.reduce((sum, item) => {
-                return sum + (Number(item.total) || Number(item.qty) * Number(item.unitPrice) || 0);
-            }, 0);
-            
-            res.render('approve_form', {
-                requisition: {
-                    ...requisition,
-                    subtotal: subtotal,
-                    grandTotal: subtotal,
-                    history: requisition.history || []
-                },
-                currentPage: 'director',
-                user: req.session.username,
-                role: 'director'
-            });
-            
-        } catch (error) {
-            console.error('Error loading director approval:', error);
-            res.status(500).send(`Error loading requisition: ${error.message}`);
-        }
+app.post('/requisition/director-approve/:id', isAuthenticated, authorize('director'), upload.single('signature_file'),async (req, res) => {
+  const requisitionId = req.params.id;
+  // Capture action and comments from the form body
+  const { action, comments } = req.body; 
+
+  try {
+    // 1. Fetch current requisition
+    const [rows] = await db.execute(
+      'SELECT status, history FROM requisitions WHERE id = ?',
+      [requisitionId]
+    );
+
+    if (rows.length === 0) return res.status(404).send("Requisition not found.");
+
+    // 2. Ensure it's in the correct stage
+    if (rows[0].status !== 'PENDING_DIRECTOR') {
+      return res.status(400).send(`Invalid action. Current status is ${rows[0].status}.`);
+    }
+
+    // 3. Handle status branching
+    let newStatus;
+    let historyLabel;
+
+    if (action === 'approve') {
+        // For HOD/Finance, Director is the final step
+        newStatus = 'APPROVED'; 
+        historyLabel = 'Approved by Director';
+    } else {
+        // If rejected, it stops here and goes back to the requester
+        newStatus = 'REJECTED_BY_DIRECTOR';
+        historyLabel = 'Rejected by Director';
+    }
+
+    // 4. Update History
+    let history = [];
+    try {
+      history = JSON.parse(rows[0].history || '[]');
+    } catch { history = []; }
+
+    history.push({
+      stage: 'Director Final Review',
+      action: action === 'approve' ? 'Approved' : 'Rejected',
+      date: new Date().toISOString(),
+      user: req.session.username,
+      comments: comments || 'No comments provided',
+      timestamp: Date.now()
     });
 
+    // 5. Save to Database
+    await db.execute(
+      'UPDATE requisitions SET status = ?, history = ? WHERE id = ?',
+      [newStatus, JSON.stringify(history), requisitionId]
+    );
 
+    // 6. Notify the requester of the final outcome
+    try {
+        await triggerWorkflowEmail(requisitionId, newStatus);
+    } catch (mailErr) {
+        console.error('❌ Email Notification Failed:', mailErr.message);
+    }
+
+    const successMessage = action === 'approve' 
+        ? 'Requisition fully approved' 
+        : 'Requisition rejected';
+
+    res.redirect(`/director/dashboard?success=${encodeURIComponent(successMessage)}`);
+
+  } catch (error) {
+    console.error('❌ Director Approval Error:', error);
+    res.status(500).send("Internal Server Error.");
+  }
+});
+
+
+
+//View requisition details
     app.get('/requisition/view/:id', isAuthenticated, async (req, res) => {
         try {
             const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [req.params.id]);
@@ -738,6 +1164,7 @@ res.render('director_dashboard', {
             const requisition = parseRequisition(rows[0]);
 
             res.render('view_details', { 
+                role: req.session.role,
                 requisition: requisition, 
                 user: req.session.username 
             });
@@ -749,53 +1176,189 @@ res.render('director_dashboard', {
 
 
 
-    app.post('/director/submit-approval/:id', isAuthenticated, authorize('director'), async (req, res) => {
-        const { id } = req.params;
-        const { signature, action, comments } = req.body;
-        const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED_BY_DIRECTOR';
-        
-        try {
-            const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [id]);
-            if (rows.length === 0) return res.status(404).send("Requisition not found");
-            
-            let history = [];
+app.get('/download-receipt/:id', async (req, res) => {
+    try {
+        const requisitionId = req.params.id;
+
+        // 1. Fetch the requisition (contains the 'items' column)
+        const [requisitions] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [requisitionId]);
+        const r = requisitions[0];
+
+        if (!r) return res.status(404).send("Requisition not found");
+
+        // Normalize the requisition and item VAT values before generating the PDF.
+        const normalizedRequisition = parseRequisition(r);
+
+        console.log("Processing PDF for Requisition ID:", normalizedRequisition.id);
+
+        // 3. Render and Generate PDF
+        const ejsPath = path.join(__dirname, 'views', 'download.ejs');
+
+        // Helper to load signature file as data URL if present
+        function loadSignatureDataURL(sigPath) {
+            if (!sigPath) return null;
             try {
-                history = typeof rows[0].history === 'string' ? JSON.parse(rows[0].history || '[]') : rows[0].history || [];
-            } catch(e) {
-                history = [];
+                // sigPath may already be a data URL
+                if (typeof sigPath === 'string' && sigPath.startsWith('data:')) return sigPath;
+
+                // Normalize leading slash
+                const rel = sigPath.startsWith('/') ? sigPath.substring(1) : sigPath;
+                const fullPath = path.join(__dirname, rel);
+                if (!fs.existsSync(fullPath)) return null;
+                const buffer = fs.readFileSync(fullPath);
+                const ext = path.extname(fullPath).toLowerCase().replace('.', '') || 'png';
+                const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png');
+                return `data:${mime};base64,${buffer.toString('base64')}`;
+            } catch (e) {
+                console.warn('Could not load signature file:', sigPath, e.message);
+                return null;
+            }
+        }
+
+        const hodSignatureImage = loadSignatureDataURL(normalizedRequisition.hodSignature);
+        const financeSignatureImage = loadSignatureDataURL(normalizedRequisition.financeSignature);
+        const directorSignatureImage = loadSignatureDataURL(normalizedRequisition.directorSignature);
+        
+        ejs.renderFile(ejsPath, { 
+            r: normalizedRequisition, 
+            logo: logoBase64,
+            itemList: normalizedRequisition.items || [],
+            hodSignatureImage,
+            financeSignatureImage,
+            directorSignatureImage
+        }, async (err, html) => {
+            if (err) {
+                console.error("EJS Error:", err);
+                return res.status(500).send("Template Error");
             }
             
-            history.push({
-                stage: action === 'approve' ? 'Approved by Director' : 'Rejected by Director',
-                date: new Date().toISOString(),
-                user: req.session.username,
-                comments: comments || '',
-                signature: signature || ''
-            });
-            
-            await db.execute(
-                'UPDATE requisitions SET status = ?, directorSignature = ?, history = ? WHERE id = ?',
-                [newStatus, signature || 'approved', JSON.stringify(history), id]
-            );
-            
-            res.redirect('/director/dashboard?success=Final approval submitted');
-        } catch (error) {
-            console.error('Error processing director approval:', error);
-            res.status(500).send(`Error processing approval: ${error.message}`);
+            try {
+                const pdfBuffer = await html_to_pdf.generatePdf(
+                    { content: html }, 
+                    { format: 'A4', printBackground: true }
+                );
+                
+                res.setHeader('Content-Type', 'application/pdf');
+                res.send(pdfBuffer);
+            } catch (pdfError) {
+                console.error('PDF Generation Failed:', pdfError);
+                res.status(500).send("PDF Generation Failed");
+            }
+        });
+
+    } catch (error) {
+        console.error("Server Error:", error);
+        res.status(500).send("Internal Server Error");
+    }
+});
+
+app.post('/director/submit-approval/:id', isAuthenticated, authorize('director'), upload.single('signature_file'), async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        // 1. Check if req.body exists (Safety check for Multer)
+        if (!req.body) {
+            return res.status(400).send("Form data could not be parsed.");
         }
-    });// 12. ERROR HANDLING
+
+        // 2. Destructure fields
+        const { action, comments } = req.body || {};
+        
+        // 3. Get the filename from Multer (req.file) instead of req.body
+        const signatureFilename = req.file ? req.file.filename : 'signed_on_portal';
+
+        // 4. Fetch the existing requisition
+        const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [id]);
+        if (rows.length === 0) return res.status(404).send("Requisition not found");
+        
+        // 5. Finalize status
+        const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED_BY_DIRECTOR';
+
+        // 6. Handle history safely
+        let history = [];
+        try {
+            history = typeof rows[0].history === 'string' ? JSON.parse(rows[0].history || '[]') : rows[0].history || [];
+        } catch(e) {
+            history = [];
+        }
+        
+        history.push({
+            stage: action === 'approve' ? 'Approved by Director' : 'Rejected by Director',
+            date: new Date().toISOString(),
+            user: req.session.username,
+            comments: comments || '',
+            signature: signatureFilename // Saving the file name here
+        });
+        
+        // 7. Update Database
+        await db.execute(
+            'UPDATE requisitions SET status = ?, directorSignature = ?, history = ? WHERE id = ?',
+            [newStatus, signatureFilename, JSON.stringify(history), id]
+        );
+
+        // 8. Email Notification
+        try {
+            await triggerWorkflowEmail(id, newStatus);
+        } catch (mailErr) {
+            console.error('❌ Email Notification Failed:', mailErr.message);
+        }
+
+        res.redirect('/director/dashboard?success=Final approval submitted');
+
+    } catch (error) {
+        console.error('Error processing director approval:', error);
+        res.status(500).send(`Error: ${error.message}`);
+    }
+});
+
+
+//  ERROR HANDLING
     app.use((req, res) => {
         res.status(404).send(`
             <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
-                <h1>404 - Page Not Found</h1>
+               <b> <h1>404 - Page Not Found</h1>
                 <p>The page you're looking for doesn't exist.</p>
-                <a href="/">Go Home</a>
+                <a href="/home">Go Home</a></b>
             </div>
         `);
     });
 
-    // 13. SERVER START
-    const server = http.createServer(app);
+
+
+
+
+
+
+//SERVER START
+const server = http.createServer(app);
+
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`\n❌ Port ${port} is already in use!`);
+            console.error('\nSolutions:');
+            console.error('1. Kill existing Node processes:');
+            console.error('   Stop-Process -Name node -Force');
+            console.error('\n2. Use a different port:');
+            console.error('   $env:PORT=3001; node index.js');
+            process.exit(1);
+        } else {
+            console.error('Server error:', err);
+        }
+    });
+
+    server.listen(port, hostname, () => {
+        console.log(`\n✅ Octagon Portal Active: http://${hostname}:${port}/`);
+        console.log('\n🔐 Login credentials:');
+        console.log('   Username: hod, finance, director, staff, brian');
+        console.log('   Password: password123');
+        console.log('\n📋 Available routes:');
+        console.log('   /login - Login page');
+        console.log('   /home - Staff requisition form');
+        console.log('   /hod/dashboard - HOD dashboard');
+        console.log('   /finance/dashboard - Finance dashboard');
+        console.log('   /director/dashboard - Director dashboard');
+        console.log('\n');
+    });erver = http.createServer(app);
 
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {

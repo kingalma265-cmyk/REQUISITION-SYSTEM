@@ -1,0 +1,12 @@
+<% if (sigImage) { %>
+    <img src="<%= sigImage %>" class="sig-image" alt="Signature">
+    <div class="sig-line"></div>
+<% } else { %>
+    <div class="sig-line"></div>
+<% } %>
+<div class="status-text <%= sigExists ? 'text-approved' : 'text-pending' %>">
+    <%= sigExists ? '✓ APPROVED' : '○ PENDING' %>
+</div>
+<div class="sig-name">
+    <%= sigExists ? verifiedText : 'Awaiting Action' %>
+</div>

@@ -101,7 +101,11 @@
             text-align: left;
         }
         th {
+<<<<<<< HEAD
             background-color: #f5f5f5;
+=======
+            background-color:  #3b82f6;
+>>>>>>> fc765db (Commiting latest changes to the main branch)
             font-weight: bold;
         }
         .btn-review {
@@ -141,7 +145,12 @@
         
     <div class="part1">
         <h1>Finance Dashboard</h1>
+<<<<<<< HEAD
         <p>Welcome, <strong><%= user %></strong> | <a href="/logout">Logout</a></p>
+=======
+       <p>Welcome, <strong><%= typeof user === 'object' ? user.username : user %></strong> | <a href="/logout">Logout</a></p>
+    
+>>>>>>> fc765db (Commiting latest changes to the main branch)
     </div>
     <% if (locals.success) { %>
         <div class="success"><%= success %></div>
@@ -155,18 +164,30 @@
     <div class="stats">
 
     <div class="stat-card">
+<<<<<<< HEAD
         <div class="stat-number"><%= stats?.total || 0 %></div>
+=======
+        <div class="stat-number"><%= stats?.pendingFinance || 0 %></div>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         <div class="stat-label">Pending Approvals</div>
     </div>
 
 
 
 
+<<<<<<< HEAD
 <div class="stat-card <%= stats?.highValue > 100000 ? 'high-value' : '' %>">
     <div class="stat-number"><%= stats?.highValue || 0 %></div>
     <div class="stat-label">High Value (&gt; 100k)</div>
 </div>
     
+=======
+ <div class="stat-card">
+            <div class="stat-number"><%= stats.highValue %></div>
+            <div class="stat-label">High Value (>100k KES)</div>
+        </div>   
+       
+>>>>>>> fc765db (Commiting latest changes to the main branch)
 
     <div class="stat-card bg-danger text-white">
         <div class="stat-number"><%= stats.rejected || 0 %></div>
@@ -185,8 +206,13 @@
                     <th>Staff Name</th>
                     <th>Department</th>
                     <th>Request Date</th>
+<<<<<<< HEAD
                     <th>Total Amount</th>
                     <th>HOD Status</th>
+=======
+                    <th>Cost Center</th>
+                    <th>Status</th>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
                     <th>Action</th>
                 </tr>
             </thead>
@@ -197,6 +223,7 @@
                     <td style="padding: 12px;"><%= req.staffName %></td>
                     <td style="padding: 12px;"><%= req.department %></td>
                     <td style="padding: 12px;"><%= new Date(req.requestDate).toLocaleDateString() %></td>
+<<<<<<< HEAD
                                 <td style="padding: 12px;" class="<%= req.grandTotal > 100000 ? 'high-value' : '' %>">
                         KES <%= Number(req.grandTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
                     </td>
@@ -208,6 +235,66 @@
                         <span style="color: #888; font-style: italic;">Pending</span>
                     <% } %>
                     </td>
+=======
+                    <!-- <td style="padding: 12px;" class="<%= req.grandTotal > 100000 ? 'high-value' : '' %>">
+                        KES <%= Number(req.grandTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
+                    </td> -->
+                    <td style="padding: 12px;">
+                        <% 
+                            const centers = (req.items && req.items.length)
+                                ? Array.from(new Set(req.items.map(i => i.costCentre).filter(Boolean)))
+                                : [];
+                            const centersLabel = centers.length
+                                ? centers.map(c => c === 'CC001' ? 'OPSL' : c === 'CC002' ? 'OIBL' : c === 'CC003' ? 'IPM' : c).join(', ')
+                                : 'N/A';
+                        %>
+                        <%= centersLabel %>
+                    </td>
+                    <!-- <td style="padding: 12px;"><%= req.hodSignature || 'Pending' %></td> -->
+                   
+                   
+        
+                   
+
+
+
+                    <td style="
+                        background-color: <%= req.hodSignature && req.hodSignature !== 'Pending' ? '#24a24a' : '#f0a500' %>;
+                        color: #ffffff;
+                        font-style: italic;
+                        font-weight: 500;
+                        text-align: center;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-size: 0.85rem;
+                        letter-spacing: 0.5px;
+                        white-space: nowrap;
+                        ">
+                        <% if (req.hodSignature && req.hodSignature !== 'Pending') { %>
+                            <strong><%= req.status %></strong>
+                        <% } else { %>
+                            <span>Pending</span>
+                        <% } %>
+                        </td>
+
+
+
+
+
+
+                   
+                   
+                   
+                   
+     
+                    <!-- <td style="background-color:#24a24a;font-style:italic;"
+                    <% if (req.hodSignature && req.hodSignature !== 'Pending') { %>
+                              <strong><%= req.status %></strong>
+                    <% } else { %>
+                        <span >Pending</span>
+                    <% } %>
+                    </td> -->
+>>>>>>> fc765db (Commiting latest changes to the main branch)
 
 
                     <td style="padding: 12px;">

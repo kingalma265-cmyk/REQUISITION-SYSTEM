@@ -1,9 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
+<<<<<<< HEAD
     <title>HOD Approval - Requisition <%= requisition.id %></title>
     <link rel="stylesheet" href="/styles/approve_form.css">
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+=======
+    <title>HOD Approval - Requisition OCT #<%= requisition.id %></title>
+    <link rel="stylesheet" href="/styles/approve_form.css">
+    <!-- <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script> -->
+>>>>>>> fc765db (Commiting latest changes to the main branch)
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -76,14 +82,29 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+<<<<<<< HEAD
         #signature-pad {
+=======
+        #signature-file {
+            padding: 10px;
+            border: 1px dashed #bbb;
+            background: #fafafa;
+            width: 100%;
+             box-sizing: border-box;
+        }
+        /* #signature-pad {
+>>>>>>> fc765db (Commiting latest changes to the main branch)
             border: 2px solid #ddd;
             border-radius: 4px;
             width: 100%;
             max-width: 400px;
             height: 200px;
             background: white;
+<<<<<<< HEAD
         }
+=======
+        } */
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         .btn {
             padding: 10px 20px;
             margin: 10px 10px 0 0;
@@ -174,7 +195,11 @@
 
     
     <div class="summary-box">
+<<<<<<< HEAD
         <p><strong>Requisition ID:</strong> <%= requisition.id %></p>
+=======
+        <p><strong>Requisition ID:</strong> OCT #<%= requisition.id %></p>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         <p><strong>Staff:</strong> <%= requisition.staffName || 'Unknown' %></p>
         <p><strong>Department:</strong> <%= requisition.department || 'N/A' %></p>
         <p><strong>Date:</strong> <%= requisition.requestDate ? new Date(requisition.requestDate).toLocaleDateString() : 'N/A' %></p>
@@ -260,6 +285,7 @@
         </tbody>
     </table>
 
+<<<<<<< HEAD
     <form id="approvalForm" action="/<%= role %>/submit-approval/<%= requisition.id %>" method="POST">
         <div class="approval-container">
             <h3><%= role === 'hod' ? 'HOD' : (role === 'finance' ? 'Finance' : 'Director') %> Action</h3>
@@ -357,5 +383,72 @@
             });
         }
     </script>
+=======
+   <form id="approvalForm" action="/<%= role %>/submit-approval/<%= requisition.id %>" method="POST" enctype="multipart/form-data">
+    <div class="approval-container">
+        <h3><%= role.toUpperCase() %> Action</h3>
+        
+        <div class="form-group">
+            <label for="signature-file">Upload Signature Attachment:</label>
+            <input type="file" name="signature_file" id="signature-file" accept="image/*,.pdf" required>
+            <small style="display: block; color: #666; margin-top: 5px;">Accepted formats: PNG, JPG, PDF (Max 2MB)</small>
+        </div>
+
+        <div class="form-group">
+            <label for="comments">Comments (Optional):</label>
+            <textarea name="comments" id="comments" rows="3" placeholder="Enter any notes here..."></textarea>
+        </div>
+
+        <input type="hidden" name="action" id="action-input">
+
+        <div class="button-group">
+            <button type="submit" id="approve-btn" class="btn btn-approve">✓ Approve</button>
+            <button type="submit" id="reject-btn" class="btn btn-reject">✗ Reject</button>
+        </div>
+    </div>
+</form>
+        <script>
+            const form = document.getElementById('approvalForm');
+            const approveBtn = document.getElementById('approve-btn');
+            const rejectBtn = document.getElementById('reject-btn');
+            const actionInput = document.getElementById('action-input');
+            const fileInput = document.getElementById('signature-file');
+
+            function submitForm(action) {
+                // Check if file is selected
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    alert('Please upload your signature attachment before submitting.');
+                    return false;
+                }
+                
+                // Set the action (approve/reject)
+                actionInput.value = action;
+                
+                // Confirm action
+                const confirmMessage = action === 'approve' 
+                    ? 'Are you sure you want to APPROVE this requisition?' 
+                    : 'Are you sure you want to REJECT this requisition? This action cannot be undone.';
+                
+                if (confirm(confirmMessage)) {
+                    form.submit();
+                }
+            }
+
+            if (approveBtn) {
+                approveBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    submitForm('approve');
+                });
+            }
+
+            if (rejectBtn) {
+                rejectBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    submitForm('reject');
+                });
+            }
+
+        </script>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
 </body>
 </html>

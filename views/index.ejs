@@ -140,21 +140,37 @@
 
     <div class="part1">
         <h1>Staff Dashboard</h1>
+<<<<<<< HEAD
         <p>Welcome, <strong><%= user %></strong> | <a href="/logout">Logout</a></p>
+=======
+        <p>Welcome, <strong><%= typeof user === 'object' ? user.username : user %></strong> | <a href="/logout">Logout</a></p>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
     </div>
 
     <div class="tables">
         <section id="date">
+<<<<<<< HEAD
             <form action="/requisition/submit-to-hod" method="POST">
                 <table id="table1">
                     <tr>
                         <td>DATE</td>
                         <td id="datae"> <input type="date" name="requestdate" style="border:none;"></td>
+=======
+            <form id="requisitionForm" action="/requisition/submit-to-hod" method="POST">
+                <table id="table1">
+                    <tr>
+                        <td>DATE</td>
+                        <td id="datae"> <input type="date" name="requestDate" style="border:none;" required></td>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
                     </tr>
                     <tr>
                         <td>STAFF NAME</td>
                         <td id="datae">
+<<<<<<< HEAD
                             <input type="text" name="staffName" value="<%= user %>" readonly 
+=======
+                            <input type="text" name="staffName" value="<%= typeof user === 'object' ? user.username : user %>" readonly 
+>>>>>>> fc765db (Commiting latest changes to the main branch)
                             style="font-weight: bold; color: darkblue; border:none; width: 100%; background-color: #f4f4f4; cursor: not-allowed;">
                         </td>
                     </tr>
@@ -186,12 +202,17 @@
                             <td>Cost centre</td>
                             <td>Item Description</td>
                             <td>Quantity</td>
+<<<<<<< HEAD
                             <td>Unit</td>
+=======
+                            <td>Unit Price</td>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
                             <td>VAT</td>
                             <td>Total</td>
                             <td></td>
                         </tr>
                     </thead>
+<<<<<<< HEAD
                     <tbody id="itembody">
                         <tr>
                             <td class="sn-cell">1</td>
@@ -200,6 +221,21 @@
                             <td><textarea name="description[]" style="border:none;"></textarea></td>
                             <td><input type="number" name="qty[]" class="qty-input" min="0" style="border:none;"></td>
                             <td><input type="number" name="unit[]" class="unit-input" min="0" step="0.01" style="border:none;"></td>
+=======
+            <tbody id="itembody">
+                        <tr>
+                            <td class="sn-cell">1</td>
+                            <td><input type="text" name="budgetLine[]" style="border:none;" required></td>
+                            <td><select name="costCentre[]" style="border:none;" required>
+                                <option value="">Select Cost Centre</option>
+                                <option value="CC001">OPSL</option>
+                                <option value="CC002">OIBL</option>
+                                <option value="CC003">IPM</option>
+                            </select></td>
+                            <td><textarea name="description[]" style="border:none;" required></textarea></td>
+                            <td><input type="number" name="qty[]" id="qty" class="qty-input" min="0" style="border:none;" required></td>
+                            <td><input type="number" id=unit name="unit[]" class="unit-input" min="0" step="0.01" style="border:none;" required></td>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
                             <td><input type="number" name="VAT[]" class="VAT-input" readonly style="border:none;"></td>
                             <td><input type="number" name="total[]" class="total-input" readonly style="border:none;"></td>
                             <td><button type="button" id="add-row" onclick="addRow()">+</button></td>
@@ -223,13 +259,17 @@
     </div>
 
     <% 
+<<<<<<< HEAD
         // 1. Logic to filter requisitions based on user role
+=======
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         let visibleRequisitions = [];
         if (typeof requisitions !== 'undefined' && requisitions !== null) {
             const currentUser = (typeof user === 'object') ? user.username : user;
             const currentRole = (typeof user === 'object' && user.role) ? user.role.toLowerCase() : '';
             const currentDept = (typeof user === 'object' && user.department) ? user.department.toLowerCase() : '';
 
+<<<<<<< HEAD
             if (currentRole === 'finance' || currentRole === 'director' || currentUser === 'brian') {
                 visibleRequisitions = requisitions;
             } else if (currentRole === 'hod') {
@@ -237,12 +277,43 @@
             } else {
                 visibleRequisitions = requisitions.filter(r => r.staffName === currentUser || r.submittedBy === currentUser);
             }
+=======
+            visibleRequisitions = requisitions.filter(r => {
+                // 1. Everyone should always see their own requisitions
+                if (r.staffName === currentUser) return true;
+
+                // 2. Director or Admin sees everything
+                if (currentRole === 'director' || currentUser === 'brian') return true;
+
+                // 3. Finance: See all approved and rejected requisitions
+                if (currentRole === 'finance') {
+                    return r.status === 'APPROVED' || (r.status && r.status.includes('REJECTED'));
+                }
+
+                // 4. HOD: See requisitions from their department they have already approved or rejected
+                if (currentRole === 'hod') {
+                    return r.department && currentDept && 
+                           r.department.toLowerCase() === currentDept && 
+                           r.status !== 'PENDING_HOD';
+                }
+
+                return false;
+            });
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         }
     %>
 
     <section class="progress-tracker" style="margin: 20px;">
         <h3>My Requisition Progress</h3>
         
+<<<<<<< HEAD
+=======
+        <div style="margin: 15px 0;">
+            <input type="text" id="tableSearch" onkeyup="filterTrackingTable()" placeholder="Search by ID or Staff Name..." 
+                style="padding: 10px; width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.075);">
+        </div>
+
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         <% if (visibleRequisitions && visibleRequisitions.length > 0) { %>
             <table id="tracking-table" style="width: 100%; border-collapse: collapse; background: white;">
                 <thead>
@@ -306,5 +377,73 @@
     </section>
 
     <script src="/scripts/table-logic.js"></script>
+<<<<<<< HEAD
+=======
+    <script>
+        // Handle Requisition Form Submission via AJAX to show Alerts for errors
+        document.getElementById('requisitionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submit');
+            const originalBtnText = submitBtn.innerText;
+            
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Processing...';
+
+            const formData = new FormData(this);
+            const data = new URLSearchParams(formData);
+
+            try {
+                const response = await fetch(this.action, {
+                    method: 'POST',
+                    body: data,
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+
+                if (response.ok) {
+                    // On success, follow the redirect (usually back to /home with a success message)
+                    window.location.href = response.url || '/home?success=Requisition submitted successfully';
+                } else {
+                    // On error (like 400 Bad Request), show the server message in an alert
+                    const errorText = await response.text();
+                    alert(errorText);
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = originalBtnText;
+                }
+            } catch (err) {
+                alert('An unexpected error occurred. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.innerText = originalBtnText;
+            }
+        });
+
+        function filterTrackingTable() {
+            const input = document.getElementById("tableSearch");
+            const filter = input.value.toUpperCase();
+            const table = document.getElementById("tracking-table");
+            if (!table) return;
+            
+            const tr = table.getElementsByTagName("tr");
+
+            // Loop through all table rows, starting from index 1 (skip header)
+            for (let i = 1; i < tr.length; i++) {
+                const tdId = tr[i].getElementsByTagName("td")[0];   // ID column
+                const tdName = tr[i].getElementsByTagName("td")[1]; // Staff Name column
+                
+                if (tdId && tdName) {
+                    const idText = tdId.textContent || tdId.innerText;
+                    const nameText = tdName.textContent || tdName.innerText;
+                    
+                    if (idText.toUpperCase().indexOf(filter) > -1 || nameText.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+        }
+    </script>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
 </body>
 </html>

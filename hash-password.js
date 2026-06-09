@@ -15,11 +15,19 @@ async function setupUsers() {
         
         // Define users to create/update
         const users = [
+<<<<<<< HEAD
             { username: 'hod', role: 'hod' },
             { username: 'finance', role: 'finance' },
             { username: 'director', role: 'director' },
             { username: 'staff', role: 'staff' },
             { username: 'brian', role: 'director' } // Keep existing user
+=======
+            { username: 'hod', role: 'hod', email: 'victor.malanga@octagonafrica.com', department: 'ICT' },
+            { username: 'finance', role: 'finance', email: 'waswa2002brian@gmail.com', department: 'Finance' },
+            { username: 'director', role: 'director', email: 'director@example.com', department: 'Executive' },
+            { username: 'staff', role: 'staff', email: 'brian.wekesa@octagonafrica.com', department: 'ICT' },
+            { username: 'brian', role: 'director', email: 'prevailer.muhani@octagonafrica.com', department: 'Executive' }
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         ];
         
         console.log('\n2. Updating/Creating users...');
@@ -35,15 +43,25 @@ async function setupUsers() {
                 if (existing.length === 0) {
                     // Insert new user
                     await db.execute(
+<<<<<<< HEAD
                         'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
                         [user.username, hashedPassword, user.role]
+=======
+                        'INSERT INTO users (username, password_hash, role, email, department) VALUES (?, ?, ?, ?, ?)',
+                        [user.username, hashedPassword, user.role, user.email, user.department]
+>>>>>>> fc765db (Commiting latest changes to the main branch)
                     );
                     console.log(`   ✓ Created user: ${user.username} (${user.role})`);
                 } else {
                     // Update existing user's password
                     await db.execute(
+<<<<<<< HEAD
                         'UPDATE users SET password_hash = ?, role = ? WHERE username = ?',
                         [hashedPassword, user.role, user.username]
+=======
+                        'UPDATE users SET password_hash = ?, role = ?, email = ?, department = ? WHERE username = ?',
+                        [hashedPassword, user.role, user.email, user.department, user.username]
+>>>>>>> fc765db (Commiting latest changes to the main branch)
                     );
                     console.log(`   ✓ Updated user: ${user.username} (${user.role})`);
                 }

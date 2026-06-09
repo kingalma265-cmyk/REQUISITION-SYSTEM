@@ -1,6 +1,10 @@
 <html>
     <head>
+<<<<<<< HEAD
         <title>Requisition #<%= requisition.id %> Details</title>
+=======
+        <title>Requisition OCT #<%= requisition.id %> Details</title>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         <link rel="stylesheet" href="/css/index.css"> 
         <style>
         * {
@@ -140,12 +144,25 @@
 
     <div class="part1">
         <h1>Approval History & Remarks</h1>
+<<<<<<< HEAD
         <p>Welcome, <strong><%= user %></strong> | <a href="/home">Back to Dashboard</a></p>
     </div>
    <table style="border: 1px solid black; width: 70%; margin: 40px auto; border-collapse: collapse;">
     <tbody>
         <tr>
             <th colspan="2"><h2>Requisition #<%= requisition.id %> Details</h2></th>
+=======
+      
+
+        <p>Welcome, <strong><%= user %></strong> | <a href="/home">Back to Dashboard</a></p>
+    </div>
+
+
+   <table style="border: 1px solid black; width: 70%; margin: 40px auto; border-collapse: collapse;">
+    <tbody>
+        <tr>
+            <th colspan="2"><h2>Requisition OCT #<%= requisition.id %> Details</h2></th>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
         </tr>
 
         <tr>
@@ -185,7 +202,18 @@
                 </td>
             </tr>
         <% }) %>
+<<<<<<< HEAD
     </tbody>
+=======
+        <tr>
+            <td colspan="2" style="text-align: center; padding: 20px;">
+           <a href="/download-receipt/<%= requisition.id %>" target="_blank" class="btn-download" style="background: #135dad; color: white; padding: 5px 10px; text-decoration: none; border-radius: 5px;">
+                Download Receipt </a>
+            </td>
+        </tr>
+    </tbody>
+
+>>>>>>> fc765db (Commiting latest changes to the main branch)
 </table>
 </body>
 </html>

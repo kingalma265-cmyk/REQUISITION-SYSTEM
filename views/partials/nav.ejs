@@ -8,6 +8,7 @@
     <a href="/hod/dashboard" class="<%= (locals.currentPage === 'hod') ? 'active' : '' %>">HOD Dashboard</a>
     <a href="/finance/dashboard" class="<%= (locals.currentPage === 'finance') ? 'active' : '' %>">Finance</a>
     <a href="/director/dashboard" class="<%= (locals.currentPage === 'director') ? 'active' : '' %>">Director</a>
+<<<<<<< HEAD
     
     <div class="nav-user-info">
         
@@ -15,6 +16,9 @@
        
        
     </div>
+=======
+    <a href="/logout" class="logout-link" style="color:red;">Logout</a>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
 </nav>
 <style>
 .p{
@@ -46,4 +50,35 @@
         margin: 0.25rem 0;
     }
 }
+<<<<<<< HEAD
 </style>
+=======
+</style>
+
+
+
+
+
+
+
+
+
+
+ <!-- <% 
+        // 1. Logic to filter requisitions based on user role
+        let visibleRequisitions = [];
+        if (typeof requisitions !== 'undefined' && requisitions !== null) {
+            const currentUser = (typeof user === 'object') ? user.username : user;
+            const currentRole = (typeof user === 'object' && user.role) ? user.role.toLowerCase() : '';
+            const currentDept = (typeof user === 'object' && user.department) ? user.department.toLowerCase() : '';
+
+            if (currentRole === 'finance' || currentRole === 'director' || currentUser === 'brian') {
+                visibleRequisitions = requisitions;
+            } else if (currentRole === 'hod') {
+                visibleRequisitions = requisitions.filter(r => r.department && currentDept && r.department.toLowerCase() === currentDept);
+            } else {
+                visibleRequisitions = requisitions.filter(r => r.staffName === currentUser || r.submittedBy === currentUser);
+            }
+        }
+    %> -->
+>>>>>>> fc765db (Commiting latest changes to the main branch)

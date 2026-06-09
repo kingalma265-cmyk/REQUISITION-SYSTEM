@@ -96,6 +96,18 @@
             font-size: 0.85rem;
             margin-bottom: 16px;
         }
+<<<<<<< HEAD
+=======
+
+        .success-msg {
+            color: #15803d;
+            background: #dcfce7;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+        }
+>>>>>>> fc765db (Commiting latest changes to the main branch)
     </style>
 </head>
 <body>
@@ -109,10 +121,21 @@
             <div class="error-msg"><%= error %></div>
         <% } %>
 
+<<<<<<< HEAD
         <form action="/login" method="POST">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" name="username" id="username" required placeholder="e.g. brian.wekesa">
+=======
+        <% if (locals.success) { %>
+            <div class="success-msg"><%= success %></div>
+        <% } %>
+
+        <form action="/login" method="POST">
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" name="email" id="email" required placeholder="e.g. brian.wekesa@octagonafrica.com">
+>>>>>>> fc765db (Commiting latest changes to the main branch)
             </div>
 
             <div class="form-group">
@@ -122,6 +145,10 @@
 
             <button type="submit" class="btn-login">Sign In</button>
         </form>
+<<<<<<< HEAD
+=======
+        <p style="text-align: center; margin-top: 20px;" href="/forgot-password">Forgot your password? <a href="/forgot-password" style="color: #1e3a8a; text-decoration: none;">Reset it here</a></p>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
     </div>
 
 </body>

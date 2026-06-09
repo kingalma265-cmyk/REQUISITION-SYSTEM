@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+<<<<<<< HEAD
     <title>Review Requisition #<%= requisition.id %></title>
     <link rel="stylesheet" href="/css/style.css"> <style>
         .detail-container { margin: 20px; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
@@ -59,5 +60,340 @@
             </form>
         </div>
     </div>
+=======
+    <title><%= user.role === 'hod' ? 'HOD' : (user.role === 'finance' ? 'Finance' : 'Director') %> Approval - Requisition OCT #<%= requisition.id %></title>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+    <link rel="stylesheet" href="/styles/approve_form.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+        }
+        #signature-file {
+            padding: 10px;
+            border: 1px dashed #bbb;
+            background: #fafafa;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .top {
+            background: #0071bc;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        #logo {
+            height: 50px;
+        }
+        .top h2, .top h3 {
+            margin: 0;
+            color: white;
+        }
+        nav.main-nav {
+            background: #333;
+            padding: 10px 20px;
+            display: flex;
+            gap: 20px;
+        }
+        nav.main-nav a {
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+        }
+        nav.main-nav a:hover {
+            background: #555;
+            border-radius: 3px;
+        }
+        .summary-box {
+            background: white;
+            margin: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .summary-box p {
+            margin: 10px 0;
+        }
+        table {
+            width: calc(100% - 40px);
+            margin: 20px;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+        .approval-container {
+            background: white;
+            margin: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #signature-pad {
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            max-width: 400px;
+            height: 200px;
+            background: white;
+        }
+        .btn {
+            padding: 10px 20px;
+            margin: 10px 10px 0 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .btn-approve {
+            background: #4caf50;
+            color: white;
+        }
+        .btn-approve:hover {
+            background: #45a049;
+        }
+        .btn-reject {
+            background: #f44336;
+            color: white;
+        }
+        .btn-reject:hover {
+            background: #da190b;
+        }
+        .btn-clear {
+            background: #ff9800;
+            color: white;
+        }
+        .btn-clear:hover {
+            background: #e68900;
+        }
+        .btn-back {
+            background: #666;
+            color: white;
+            text-decoration: none;
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 4px;
+        }
+        .btn-back:hover {
+            background: #555;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        .alert {
+            padding: 15px;
+            margin: 20px;
+            border-radius: 4px;
+        }
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="top">
+        <img src="/Images/octagon-logo.png" id="logo" alt="Octagon Logo">
+        <h2><%= user.role === 'hod' ? 'HOD' : (user.role === 'finance' ? 'FINANCE' : 'DIRECTOR') %> APPROVAL INTERFACE</h2>
+    </div>
+
+    <!-- <nav class="main-nav">
+        <a href="/home">New Requisition</a>
+        <a href="/hod/dashboard">HOD Dashboard</a>
+        <a href="/finance/dashboard">Finance Dashboard</a>
+        <a href="/director/dashboard">Director Dashboard</a>
+    </nav> -->
+     <%- include('partials/nav') %>
+
+    <div class="summary-box">
+        <p><strong>Requisition ID:</strong> OCT #<%= requisition.id %></p>
+        <p><strong>Staff:</strong> <%= requisition.staffName || 'Unknown' %></p>
+        <p><strong>Department:</strong> <%= requisition.department || 'N/A' %></p>
+        <p><strong>Date:</strong> <%= requisition.requestDate ? new Date(requisition.requestDate).toLocaleDateString() : 'N/A' %></p>
+        <p><strong>Grand Total:</strong> KES 
+            <% 
+                // SAFE GRAND TOTAL CALCULATION
+                let totalAmount = 0;
+                
+                // Try to get from grandTotal first
+                if (requisition.grandTotal && !isNaN(parseFloat(requisition.grandTotal))) {
+                    totalAmount = parseFloat(requisition.grandTotal);
+                } 
+                // Otherwise try to calculate from items
+                else if (requisition.items) {
+                    try {
+                        let itemsArray = requisition.items;
+                        if (typeof requisition.items === 'string') {
+                            itemsArray = JSON.parse(requisition.items);
+                        }
+                        if (Array.isArray(itemsArray)) {
+                            totalAmount = itemsArray.reduce((sum, item) => {
+                                return sum + (parseFloat(item.total) || parseFloat(item.qty) * parseFloat(item.unitPrice) || 0);
+                            }, 0);
+                        }
+                    } catch(e) {
+                        console.error('Error calculating total:', e);
+                        totalAmount = 0;
+                    }
+                }
+                
+                // Ensure it's a valid number
+                totalAmount = isNaN(totalAmount) ? 0 : totalAmount;
+            %>
+            <%= totalAmount.toFixed(2) %>
+        </p>  
+        <p>
+          
+                <a href="/<%= user.role %>/dashboard" class="btn-back" style="color: #fff; background: #0071bc; padding: 7px 12px; text-decoration: none; border-radius: 4px; display: inline-block;">Back to Dashboard</a>
+        </p>
+    </div>
+
+    <table>
+        <thead>
+            <tr style="font-weight: bold; background: #f5f5f5;">
+                <th>Item Description</th>
+                <th>Quantity</th>
+                <th>Unit Price (KES)</th>
+                <th>Total (KES)</th>
+             </tr>
+        </thead>
+        <tbody>
+            <% 
+            let itemsArray = [];
+            if (requisition.items) {
+                if (Array.isArray(requisition.items)) {
+                    itemsArray = requisition.items;
+                } else if (typeof requisition.items === 'string') {
+                    try {
+                        itemsArray = JSON.parse(requisition.items);
+                    } catch(e) {
+                        console.error('Error parsing items:', e);
+                        itemsArray = [];
+                    }
+                }
+            }
+            
+            if (itemsArray.length > 0) {
+                itemsArray.forEach(item => { 
+                    const itemTotal = Number(item.total) || (Number(item.qty) * Number(item.unitPrice)) || 0;
+            %>
+            <tr>
+                <td><%= item.description || 'N/A' %></td>
+                <td><%= item.qty || 0 %></td>
+                <td>KES <%= (Number(item.unitPrice) || 0).toFixed(2) %></td>
+               <td style="padding: 12px;" class="<%= requisition.grandTotal > 100000 ? 'high-value' : '' %>">
+                    KES <%= Number(requisition.grandTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
+                </td>
+            </tr>
+            <% }); } else { %>
+            <tr>
+                <td colspan="4" style="text-align: center;">No items found</td>
+            </tr>
+            <% } %>
+        </tbody>
+    </table>
+
+
+    <!-- <form id="approvalForm" action="/<%= user.role %>/director-approve/<%= requisition.id %>" method="POST" enctype="multipart/form-data">
+         -->
+        <form id="approvalForm"
+      action="/requisition/director-approve/<%= requisition.id %>"
+      method="POST"
+      enctype="multipart/form-data">
+        <div class="approval-container">
+            <h3><%= (user && user.role ? user.role.toUpperCase() : 'DIRECTOR') %> Decision</h3>            <p>Please upload your digital signature (Image or PDF):</p>
+            
+            <div class="form-group">
+                <input type="file" name="signature_file" id="signature-file" accept="image/*,.pdf" required>
+                <small style="display: block; color: #666; margin-top: 5px;">Accepted formats: PNG, JPG, PDF</small>
+            </div>
+
+            <input type="hidden" name="action" id="action-input">
+            
+            <div class="button-group">
+                <button type="submit" id="approve-btn" class="btn btn-approve">✓ Approve</button>
+                <button type="submit" id="reject-btn" class="btn btn-reject">✗ Reject</button>
+            </div>
+            
+            <div class="form-group">
+                <label for="comments">Comments (Optional):</label>
+                <textarea name="comments" id="comments" rows="3" placeholder="Add any comments..."></textarea>
+            </div>
+        </div>
+    </form>
+
+    <script>
+        const form = document.getElementById('approvalForm');
+        const actionInput = document.getElementById('action-input');
+        const fileInput = document.getElementById('signature-file');
+
+        function handleSubmission(e, action) {
+            e.preventDefault(); // Stop the form from submitting immediately
+
+            // 1. Validate that a file is selected
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Please upload your signature attachment before submitting.');
+                return;
+            }
+
+            // 2. Set the action value ('approve' or 'reject')
+            actionInput.value = action;
+
+            // 3. Confirmation
+            const msg = action === 'approve' 
+                ? 'Are you sure you want to APPROVE?' 
+                : 'Are you sure you want to REJECT? This cannot be undone.';
+
+            if (confirm(msg)) {
+                form.submit();
+            }
+        }
+
+        // Attach listeners to the specific buttons
+        document.getElementById('approve-btn').addEventListener('click', (e) => handleSubmission(e, 'approve'));
+        document.getElementById('reject-btn').addEventListener('click', (e) => handleSubmission(e, 'reject'));
+    </script>
+>>>>>>> fc765db (Commiting latest changes to the main branch)
 </body>
 </html>
