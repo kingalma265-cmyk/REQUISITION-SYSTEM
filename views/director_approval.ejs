@@ -1,21 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-<<<<<<< HEAD
-    <title>Director Final Approval</title>
-    <link rel="stylesheet" href="/styles/director_approval.css">
-    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
-</head>
-<body>
-    <div class="top">
-            <img src="/Images/octagon-logo.png" id="logo">
-            <h2 id="headline"><u>DIRECTOR'S APRROVAL</u></h2>
-    </div>
-
-
-    <!-- <nav class="main-nav">
-        <a href="/">New Requisition</a>
-=======
     <title><%= userRole === 'hod' ? 'HOD' : (userRole === 'finance' ? 'Finance' : 'Director') %> Approval - Requisition OCT #<%= requisition.id %></title>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <link rel="stylesheet" href="/styles/approve_form.css">
@@ -195,32 +180,10 @@
 
     <!-- <nav class="main-nav">
         <a href="/home">New Requisition</a>
->>>>>>> fc765db (Commiting latest changes to the main branch)
         <a href="/hod/dashboard">HOD Dashboard</a>
         <a href="/finance/dashboard">Finance Dashboard</a>
         <a href="/director/dashboard">Director Dashboard</a>
     </nav> -->
-<<<<<<< HEAD
-    <%- include('partials/nav') %>
-    
-
-    <div class="approval-history" style="background: #f9f9f9; padding: 15px; border-radius: 8px;">
-        <p><strong>HOD/Supervisor:</strong> Approved <img src="<%= requisition.hodSignature %>" width="100"></p>
-        <p><strong>Finance Authorization:</strong> Approved <img src="<%= requisition.financeSignature %>" width="100"></p>
-    </div>
-
-    <div class="items-display">
-        <h3>Requisition Details</h3>
-        <table id="table2">
-            <thead>
-                <tr style="font-weight: bold;">
-                    <td>Description</td>
-                    <td>Qty</td>
-                    <td>Total</td>
-                </tr>
-            </thead>
-                <tbody>
-=======
      <%- include('partials/nav') %>
 
     <div class="summary-box">
@@ -275,7 +238,6 @@
              </tr>
         </thead>
         <tbody>
->>>>>>> fc765db (Commiting latest changes to the main branch)
             <% 
             let itemsArray = [];
             if (requisition.items) {
@@ -295,17 +257,6 @@
                 itemsArray.forEach(item => { 
                     const itemTotal = Number(item.total) || (Number(item.qty) * Number(item.unitPrice)) || 0;
             %>
-<<<<<<< HEAD
-           <tr>
-    <td><%= item.description || 'N/A' %></td>
-    <td><%= item.qty || 0 %></td>
-    <td>KES <%= (Number(item.unitPrice) || 0).toFixed(2) %></td>
-    
-    <td style="padding: 12px;" class="<%= requisition.grandTotal > 100000 ? 'high-value' : '' %>">
-        KES <%= Number(itemTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
-    </td>
-</tr>
-=======
             <tr>
                 <td><%= item.description || 'N/A' %></td>
                 <td><%= item.qty || 0 %></td>
@@ -314,27 +265,12 @@
                     KES <%= Number(requisition.grandTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
                 </td>
             </tr>
->>>>>>> fc765db (Commiting latest changes to the main branch)
             <% }); } else { %>
             <tr>
                 <td colspan="4" style="text-align: center;">No items found</td>
             </tr>
             <% } %>
         </tbody>
-<<<<<<< HEAD
-        </table>
-    </div>
-
-    <form id="directorForm" action="/director/submit-approval/<%= requisition.id %>" method="POST">
-        <div class="approval-row">
-            <span class="label">Director Signature:</span>
-            <canvas id="director-pad" style="border: 1px solid #000; width: 400px; height: 150px;"></canvas>
-            <input type="hidden" name="signature" id="director-sig-data">
-        </div>
-        <div style="margin-top: 20px;">
-            <button type="submit" name="action" value="approve" style="background: navy; color: white; padding: 10px 25px;">Final Approval</button>
-            <button type="submit" name="action" value="reject" style="background: darkred; color: white; padding: 10px 25px;">Decline</button>
-=======
     </table>
 
 
@@ -359,23 +295,10 @@
                 <label for="comments">Comments (Optional):</label>
                 <textarea name="comments" id="comments" rows="3" placeholder="Add any comments..."></textarea>
             </div>
->>>>>>> fc765db (Commiting latest changes to the main branch)
         </div>
     </form>
 
     <script>
-<<<<<<< HEAD
-        const canvas = document.getElementById('director-pad');
-        const pad = new SignaturePad(canvas);
-        document.getElementById('directorForm').onsubmit = () => {
-            if (pad.isEmpty()) {
-                alert("Signature required for final approval.");
-                return false;
-            }
-            document.getElementById('director-sig-data').value = pad.toDataURL();
-            return true;
-        };
-=======
         const form = document.getElementById('approvalForm');
         const actionInput = document.getElementById('action-input');
         const fileInput = document.getElementById('signature-file');
@@ -405,7 +328,6 @@
         // Attach listeners to the specific buttons
         document.getElementById('approve-btn').addEventListener('click', (e) => handleSubmission(e, 'approve'));
         document.getElementById('reject-btn').addEventListener('click', (e) => handleSubmission(e, 'reject'));
->>>>>>> fc765db (Commiting latest changes to the main branch)
     </script>
 </body>
 </html>

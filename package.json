@@ -15,20 +15,10 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-<<<<<<< HEAD
-    "content-type": "^1.0.5",
-    "cookie-parser": "^1.4.7",
-    "ejs": "^5.0.1",
-    "express": "^5.2.1",
-    "express-session": "^1.19.0",
-    "formidable": "^3.5.4",
-    "mongoose": "^9.3.3",
-    "mysql2": "^3.20.0"
-=======
     "bent": "^7.3.12",
     "content-type": "^1.0.5",
-    "dotenv": "^16.4.5",
     "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.5",
     "ejs": "^5.0.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
@@ -39,6 +29,5 @@
     "mysql2": "^3.20.0",
     "nodemailer": "^8.0.7",
     "zeptomail": "^7.0.2"
->>>>>>> fc765db (Commiting latest changes to the main branch)
   }
 }

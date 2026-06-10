@@ -261,8 +261,8 @@
                 <td><%= item.description || 'N/A' %></td>
                 <td><%= item.qty || 0 %></td>
                 <td>KES <%= (Number(item.unitPrice) || 0).toFixed(2) %></td>
-               <td style="padding: 12px;" class="<%= requisition.grandTotal > 100000 ? 'high-value' : '' %>">
-                    KES <%= Number(requisition.grandTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
+               <td style="padding: 12px;">
+                    KES <%= Number(itemTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
                 </td>
             </tr>
             <% }); } else { %>
@@ -280,7 +280,7 @@
             <p>Please upload your digital signature (Image or PDF):</p>
             
             <div class="form-group">
-                <input type="file" name="signature_file" id="signature-file" accept="image/*,.pdf" required>
+                <input type="file" name="signature_file" id="signature-file" accept="image/*,.pdf">
                 <small style="display: block; color: #666; margin-top: 5px;">Accepted formats: PNG, JPG, PDF</small>
             </div>
 
@@ -308,8 +308,10 @@
 
             // 1. Validate that a file is selected
             if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Please upload your signature attachment before submitting.');
-                return;
+                if (action === 'approve') {
+                    alert('Please upload your signature before approving.');
+                    return;
+                }
             }
 
             // 2. Set the action value ('approve' or 'reject')

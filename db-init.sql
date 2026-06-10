@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `must_reset_password` TINYINT(1) NOT NULL DEFAULT 0,
   `reset_password_token` VARCHAR(255) DEFAULT NULL,
   `reset_password_expires` DATETIME DEFAULT NULL,
+  `otp_code` VARCHAR(6) DEFAULT NULL,
+  `otp_expires` DATETIME DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `ux_users_email` (`email`)

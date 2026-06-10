@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset Password | Octagon Requisition System</title>
+    <title>Verify OTP | Octagon Requisition System</title>
     <link rel="stylesheet" href="/styles/index.css">
     <style>
         body {
@@ -24,6 +24,11 @@
             width: 100%;
             max-width: 400px;
             text-align: center;
+        }
+
+        #logo {
+            max-width: 150px;
+            margin-bottom: 20px;
         }
 
         h2 {
@@ -101,49 +106,47 @@
             font-size: 0.85rem;
             margin-bottom: 16px;
         }
-
-        .info-box {
-            background: #f0f7ff;
-            border: 1px solid #bfdbfe;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 16px;
-            font-size: 0.85rem;
-            color: #1e40af;
-            text-align: left;
-        }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>Set New Password</h2>
-        <p>Enter your new password below.</p>
+        <img src="/Images/octagon-logo.png" id="logo" alt="Octagon Africa">
+        <h2>Verify OTP</h2>
+        <p>Enter the OTP sent to your email address.</p>
 
-        <div class="info-box">
-            After changing your password, you will be redirected to the login page to sign in again.
-        </div>
+        <% if (message) { %>
+            <div class="success-msg"><%= message %></div>
+        <% } %>
 
         <% if (error) { %>
             <div class="error-msg"><%= error %></div>
         <% } %>
 
-        <form action="<%= formAction || ('/reset-password/' + token) %>" method="POST">
+        <form action="/verify-otp" method="POST">
             <div class="form-group">
-                <label for="password">New Password</label>
-                <input type="password" name="password" id="password" required minlength="8" placeholder="At least 8 characters">
+                <label for="email">Email Address</label>
+                <input type="email" name="email" id="email" required placeholder="e.g. brian.wekesa@octagonafrica.com" value="<%= resetEmail || '' %>">
             </div>
-
             <div class="form-group">
-                <label for="confirmPassword">Confirm New Password</label>
-                <input type="password" name="confirmPassword" id="confirmPassword" required minlength="8" placeholder="Confirm your password">
+                <label for="otp">One-Time Password (OTP)</label>
+                <input type="text" name="otp" id="otp" required maxlength="6" placeholder="000000" inputmode="numeric" pattern="[0-9]{6}">
             </div>
-
-            <button type="submit" class="btn">Update Password</button>
+            <button type="submit" class="btn">Verify OTP</button>
         </form>
 
         <p style="text-align: center; margin-top: 20px;">
-            <a href="/login" style="color: #1e3a8a; text-decoration: none;">← Back to Login</a>
+            <a href="/forgot-password" style="color: #1e3a8a; text-decoration: none;">← Back to Forgot Password</a>
         </p>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const otpInput = document.getElementById('otp');
+            if (otpInput) {
+                otpInput.addEventListener('input', function() {
+                    this.value = this.value.replace(/\D/g, '').slice(0, 6);
+                });
+            }
+        });
+    </script>
 </body>
 </html>

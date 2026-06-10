@@ -264,48 +264,11 @@
     </div>
 
     <div class="signature-section">
-
-    <% if (r.role === 'HOD') { %>
-        <div class="sig-box">
-            <div class="sig-line">Director Approval</div>
-            <div class="sig-image-container">
-                <% if (directorSignatureImage || r.directorSignature) { %>
-                    <img src="<%= directorSignatureImage ? directorSignatureImage : (r.directorSignature.startsWith('data:') ? r.directorSignature : ('/' + r.directorSignature.replace(/^\//, ''))) %>" class="sig-image" alt="Director Signature">
-                <% } else { %>
-                    <div style="height:60px"></div>
-                <% } %>
-            </div>
-            <div class="status-text <%= r.directorSignature ? 'text-approved' : 'text-pending' %>">
-                <%= r.directorSignature ? '✓ APPROVED' : '○ PENDING' %>
-            </div>
-            <div class="sig-name">
-                <%= r.directorSignature ? 'Verified by Director' : 'Awaiting Action' %>
-            </div>
-        </div>
-
-        <div class="sig-box">
-            <div class="sig-line">Finance Approval</div>
-            <div class="sig-image-container">
-                <% if (financeSignatureImage || r.financeSignature) { %>
-                    <img src="<%= financeSignatureImage ? financeSignatureImage : (r.financeSignature.startsWith('data:') ? r.financeSignature : ('/' + r.financeSignature.replace(/^\//, ''))) %>" class="sig-image" alt="Finance Signature">
-                <% } else { %>
-                    <div style="height:60px"></div>
-                <% } %>
-            </div>
-            <div class="status-text <%= r.financeSignature ? 'text-approved' : 'text-pending' %>">
-                <%= r.financeSignature ? '✓ APPROVED' : '○ PENDING' %>
-            </div>
-            <div class="sig-name">
-                <%= r.financeSignature ? 'Verified by Finance' : 'Awaiting Action' %>
-            </div>
-        </div>
-
-    <% } else { %>
         <div class="sig-box">
             <div class="sig-line">HOD Approval</div>
             <div class="sig-image-container">
                 <% if (hodSignatureImage || r.hodSignature) { %>
-                    <img src="<%= hodSignatureImage ? hodSignatureImage : (r.hodSignature.startsWith('data:') ? r.hodSignature : ('/' + r.hodSignature.replace(/^\//, ''))) %>" class="sig-image" alt="HOD Signature">
+                    <img src="<%= hodSignatureImage ? hodSignatureImage : (r.hodSignature && r.hodSignature.startsWith('data:') ? r.hodSignature : ('/' + (r.hodSignature || '').replace(/^\//, ''))) %>" class="sig-image" alt="HOD Signature">
                 <% } else { %>
                     <div style="height:60px"></div>
                 <% } %>
@@ -322,7 +285,7 @@
             <div class="sig-line">Finance Approval</div>
             <div class="sig-image-container">
                 <% if (financeSignatureImage || r.financeSignature) { %>
-                    <img src="<%= financeSignatureImage ? financeSignatureImage : (r.financeSignature.startsWith('data:') ? r.financeSignature : ('/' + r.financeSignature.replace(/^\//, ''))) %>" class="sig-image" alt="Finance Signature">
+                    <img src="<%= financeSignatureImage ? financeSignatureImage : (r.financeSignature && r.financeSignature.startsWith('data:') ? r.financeSignature : ('/' + (r.financeSignature || '').replace(/^\//, ''))) %>" class="sig-image" alt="Finance Signature">
                 <% } else { %>
                     <div style="height:60px"></div>
                 <% } %>
@@ -334,8 +297,23 @@
                 <%= r.financeSignature ? 'Verified by Finance' : 'Awaiting Action' %>
             </div>
         </div>
-    <% } %>
 
+        <div class="sig-box">
+            <div class="sig-line">Director Approval</div>
+            <div class="sig-image-container">
+                <% if (directorSignatureImage || r.directorSignature) { %>
+                    <img src="<%= directorSignatureImage ? directorSignatureImage : (r.directorSignature && r.directorSignature.startsWith('data:') ? r.directorSignature : ('/' + (r.directorSignature || '').replace(/^\//, ''))) %>" class="sig-image" alt="Director Signature">
+                <% } else { %>
+                    <div style="height:60px"></div>
+                <% } %>
+            </div>
+            <div class="status-text <%= r.directorSignature ? 'text-approved' : 'text-pending' %>">
+                <%= r.directorSignature ? '✓ APPROVED' : '○ PENDING' %>
+            </div>
+            <div class="sig-name">
+                <%= r.directorSignature ? 'Verified by Director' : 'Awaiting Action' %>
+            </div>
+        </div>
     </div>
 
     <div class="footer">

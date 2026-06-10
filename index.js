@@ -4,7 +4,6 @@
     const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const db = require('./config/db');
-const formidable = require('formidable');
 const path = require('path');
 const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
     const ejs = require('ejs');
@@ -65,9 +64,9 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
                 costCentre: item.costCentre || item.costCentre === '' ? item.costCentre : 'N/A'
             };
 
-            if (!normalizedItem.vat && normalizedItem.qty && normalizedItem.unitPrice && normalizedItem.total) {
+            if (!normalizedItem.vat && normalizedItem.qty && normalizedItem.unitPrice) {
                 const base = normalizedItem.qty * normalizedItem.unitPrice;
-                const computedVat = normalizedItem.total - base;
+                const computedVat = base * 0.16;
                 normalizedItem.vat = Number(computedVat.toFixed(2));
             }
 
@@ -99,17 +98,20 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
     app.use(express.json({ limit: '50mb' }));
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-    app.use(express.urlencoded({ extended: true }));
 
     const ensureResetColumns = async () => {
         try {
-            await db.execute(`ALTER TABLE users
-                ADD COLUMN IF NOT EXISTS _password_token VARCHAR(255) DEFAULT NULL,
-                ADD COLUMN IF NOT EXISTS reset_password_expires DATETIME DEFAULT NULL`
-            );
-            console.log('DB: ensured password reset columns exist.');
+            await db.execute(`
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS \`reset_password_token\` VARCHAR(255) DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS \`reset_password_expires\` DATETIME DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS \`must_reset_password\` TINYINT(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS \`otp_code\` VARCHAR(6) DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS \`otp_expires\` DATETIME DEFAULT NULL
+            `);
+            console.log('DB: ensured password reset and OTP columns exist.');
         } catch (migrationError) {
-            console.warn('DB: password reset column migration failed or already exists:', migrationError.message || migrationError);
+            console.log('DB: password reset/OTP column migration note:', migrationError.message || migrationError);
         }
     };
 
@@ -117,7 +119,7 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
     
     //SESSION INITIALIZATION
     app.use(session({
-        secret: 'octagon_secret_key_2026',
+        secret: process.env.SESSION_SECRET || 'octagon_secret_key_2026',
         resave: false,
         saveUninitialized: false,
         cookie: { 
@@ -279,14 +281,84 @@ app.post('/login', async (req, res) => {
         res.render('login', { error: "A server error occurred. Please try again." });
     }
 });
-const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
-
-
-
 //const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
     // Forgot Password - Display form
     app.get('/forgot-password', (req, res) => {
-        res.render('forgot_password', { error: null, message: null });
+        res.render('forgot_password', { error: null, message: null, resetEmail: '' });
+    });
+
+    const OTP_RESEND_COOLDOWN_MS = 30 * 1000; // 30 seconds cooldown
+
+    app.get('/forgot-password/verify', (req, res) => {
+        const email = req.session.otpResetEmail;
+        const otpPending = req.session.otpReset;
+        const resendAllowedAt = req.session.otpResendAllowedAt || 0;
+
+        if (!otpPending || !email) {
+            return res.redirect('/login');
+        }
+
+        // Allow only a single direct render; refresh should require re-starting flow.
+        req.session.otpReset = false;
+
+        res.render('forgot_password', {
+            error: null,
+            message: 'If an account exists for this email, an OTP has been sent. Please verify.',
+            resetEmail: email,
+            resendAllowedAt
+        });
+    });
+
+    app.get('/forgot-password/resend', async (req, res) => {
+        const email = req.session.otpResetEmail;
+        const now = Date.now();
+        const resendAllowedAt = req.session.otpResendAllowedAt || 0;
+
+        if (!email) {
+            return res.redirect('/login');
+        }
+
+        if (now < resendAllowedAt) {
+            return res.render('forgot_password', {
+                error: `Please wait ${Math.ceil((resendAllowedAt - now) / 1000)} seconds before resending.`,
+                message: 'If an account exists for this email, an OTP has been sent. Please verify.',
+                resetEmail: email,
+                resendAllowedAt
+            });
+        }
+
+        try {
+            const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+            const user = rows[0];
+
+            if (user) {
+                const otp = Math.floor(100000 + Math.random() * 900000).toString();
+                const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+                const tempPassword = crypto.randomBytes(4).toString('hex');
+
+                await db.execute(
+                    'UPDATE users SET otp_code = ?, otp_expires = ?, must_reset_password = 1 WHERE id = ?',
+                    [otp, otpExpires, user.id]
+                );
+
+                const emailResult = await sendPasswordResetEmail(user.email, otp, tempPassword);
+                if (!emailResult.success) {
+                    console.error('Error sending OTP email:', emailResult.error);
+                }
+            }
+
+            req.session.otpReset = true;
+            req.session.otpResendAllowedAt = Date.now() + OTP_RESEND_COOLDOWN_MS;
+            return res.redirect('/forgot-password/verify');
+        } catch (err) {
+            console.error('Resend OTP error:', err);
+            res.render('forgot_password', {
+                error: 'Unable to resend OTP. Please try again.',
+                message: 'If an account exists for this email, an OTP has been sent. Please verify.',
+                resetEmail: email || '',
+                resendAllowedAt
+            });
+        }
     });
 
     // Forgot Password - Handle form submission
@@ -294,36 +366,89 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
         const { email } = req.body;
 
         if (!email) {
-            return res.render('forgot_password', { error: 'Please enter your email address', message: null });
+            return res.render('forgot_password', { error: 'Please enter your email address', message: null, resetEmail: '' });
+        }
+
+        const trimmedEmail = email.trim();
+        req.session.otpResetEmail = trimmedEmail;
+        req.session.otpReset = true;
+
+        try {
+            const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [trimmedEmail]);
+            const user = rows[0];
+
+            if (user) {
+                const otp = Math.floor(100000 + Math.random() * 900000).toString();
+                const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+                const tempPassword = crypto.randomBytes(4).toString('hex');
+
+                await db.execute(
+                    'UPDATE users SET otp_code = ?, otp_expires = ?, must_reset_password = 1 WHERE id = ?',
+                    [otp, otpExpires, user.id]
+                );
+
+                const emailResult = await sendPasswordResetEmail(user.email, otp, tempPassword);
+                if (!emailResult.success) {
+                    console.error('Error sending OTP email:', emailResult.error);
+                }
+            }
+
+            req.session.otpResendAllowedAt = Date.now() + OTP_RESEND_COOLDOWN_MS;
+            return res.redirect('/forgot-password/verify');
+        } catch (err) {
+            console.error('Forgot password error:', err);
+            return res.render('forgot_password', { error: 'An error occurred. Please try again.', message: null, resetEmail: trimmedEmail });
+        }
+    });
+
+    app.get('/verify-otp', (req, res) => {
+        return res.redirect('/forgot-password/verify');
+    });
+
+    // Verify OTP - redirects to reset-password with token on success
+    app.post('/verify-otp', async (req, res) => {
+        const { email, otp } = req.body;
+
+        if (!email || !otp) {
+            return res.render('forgot_password', {
+                error: 'Please enter the OTP sent to your email.',
+                message: 'If an account exists for this email, an OTP has been sent. Please verify.',
+                resetEmail: email || ''
+            });
         }
 
         try {
-            const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+            const [rows] = await db.execute(
+                'SELECT * FROM users WHERE email = ? AND otp_code = ? AND otp_expires > NOW()',
+                [email.trim(), otp.trim()]
+            );
             const user = rows[0];
 
             if (!user) {
-                return res.render('forgot_password', { error: null, message: 'If an account exists for this email, a reset link has been sent.' });
+                return res.render('forgot_password', {
+                    error: 'Invalid or expired OTP. Please request a new one.',
+                    message: 'If an account exists for this email, an OTP has been sent. Please verify.',
+                    resetEmail: email
+                });
             }
 
+            // OTP verified - create reset token and clear OTP
             const resetToken = crypto.randomBytes(32).toString('hex');
-            const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-            const resetLink = `${appBaseUrl}/reset-password/${resetToken}`;
+            const resetExpires = new Date(Date.now() + 60 * 60 * 1000);
 
             await db.execute(
-                'UPDATE users SET reset_password_token = ?, reset_password_expires = ? WHERE id = ?',
+                'UPDATE users SET otp_code = NULL, otp_expires = NULL, reset_password_token = ?, reset_password_expires = ?, must_reset_password = 1 WHERE id = ?',
                 [resetToken, resetExpires, user.id]
             );
 
-            const emailResult = await sendPasswordResetEmail(user.email, resetLink);
-            if (!emailResult.success) {
-                console.error('Error sending password reset email:', emailResult.error);
-            }
-
-            res.render('forgot_password', { error: null, message: ' A reset link has been sent to your email address.' });
-
+            res.redirect(`/reset-password/${resetToken}`);
         } catch (err) {
-            console.error('Forgot password error:', err);
-            res.render('forgot_password', { error: 'An error occurred. Please try again.', message: null });
+            console.error('OTP verification error:', err);
+            res.render('forgot_password', {
+                error: 'An error occurred. Please try again.',
+                message: 'If an account exists for this email, an OTP has been sent. Please verify.',
+                resetEmail: email
+            });
         }
     });
 
@@ -448,7 +573,9 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
             
             res.render('index', { 
                 currentPage: 'new', 
-                requisitions: parsedRows
+                requisitions: parsedRows,
+                success: req.query.success,
+                error: req.query.error
             });
         } catch (error) {
             console.error('Error loading home page:', error);
@@ -464,14 +591,13 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
 //submit
  app.post('/requisition/submit-to-hod', isAuthenticated, async (req, res) => {
     try {
-        const { requestDate, department, grandTotal, staffName } = req.body;
+        const { requestDate, grandTotal, staffName } = req.body;
+        const department = req.session.department;
         
-        // 1. Properly declare variables at the top of the scope
         let newStatus = 'PENDING_HOD'; 
         let workflowStage = 'Prepared';
-        const userRole = req.session.role; // Ensure this is set during login
+        const userRole = req.session.role;
 
-        // 2. Determine workflow path
         if (userRole === 'hod') {
             newStatus = 'PENDING_DIRECTOR';
             workflowStage = 'Prepared by HOD (Sent to Director)';
@@ -512,6 +638,12 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
             total: Number(totals[i]) || 0
         }));
 
+        const computedGrandTotal = items.reduce((sum, item) => sum + item.total, 0);
+        const submittedGrandTotal = Number(grandTotal) || 0;
+        if (Math.abs(computedGrandTotal - submittedGrandTotal) > 1) {
+            return res.status(400).send('Validation Error: Grand total does not match item totals.');
+        }
+
         const history = [{ 
             stage: workflowStage, 
             date: new Date().toISOString(), 
@@ -527,15 +659,14 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
                 requestDate || new Date(), 
                 department, 
                 JSON.stringify(items), 
-                grandTotal, 
+                computedGrandTotal, 
                 newStatus, 
                 JSON.stringify(history)
             ]
         );
 
         const requisitionId = result.insertId;
-       // const newStatus = status === 'PENDING_HOD' ? 'PENDING_DIRECTOR' : 'PENDING_HOD';
-        
+
         // 4. Trigger Email
         try {
             await triggerWorkflowEmail(requisitionId, newStatus);
@@ -591,17 +722,19 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
             res.render('hod_dashboard', { 
                 requisitions: allDepartmentRequisitions,
                 pendingHODRequisitions: pendingHODRequisitions,
-                rejectedRequisitions: rejectedRequisitions, // New: for a separate section
-                approvedRequisitions: approvedRequisitions, // New: for a separate section
-                inProgressRequisitions: inProgressRequisitions, // New: for a separate section
+                rejectedRequisitions: rejectedRequisitions,
+                approvedRequisitions: approvedRequisitions,
+                inProgressRequisitions: inProgressRequisitions,
                 stats: {
                     total: totalDepartmentRequisitions,
-                    highValue: highValueItems, // High value across all department requisitions
-                    urgent: urgentRequests // Urgent only for pending HOD
+                    highValue: highValueItems,
+                    urgent: urgentRequests
                 },
                 currentPage: 'hod',
                 user: req.session.username,
-                role: 'hod'
+                role: 'hod',
+                success: req.query.success,
+                error: req.query.error
             });
             
         } catch (error) {
@@ -616,7 +749,8 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
                 stats: { total: 0, highValue: 0, urgent: 0 },
                 currentPage: 'hod',
                 user: req.session.username,
-                error: "Could not load requisitions: " + error.message
+                error: "Could not load requisitions: " + error.message,
+                success: req.query.success
             });
         }
     });
@@ -630,6 +764,16 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
             }
             
             const requisition = parseRequisition(rows[0]);
+            
+            if (requisition.department !== req.session.department) {
+                return res.status(403).send(`
+                    <div style="text-align:center; margin-top:50px;">
+                        <h2>Access Denied</h2>
+                        <p>This requisition belongs to ${requisition.department} department, not yours.</p>
+                        <a href="/hod/dashboard">Back to Dashboard</a>
+                    </div>
+                `);
+            }
             
             if (requisition.status !== 'PENDING_HOD') {
                 return res.status(400).send(`
@@ -687,6 +831,10 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
             }
             
             const requisition = rows[0];
+            
+            if (requisition.department !== req.session.department) {
+                return res.status(403).send("Access denied: this requisition is not from your department.");
+            }
             
             if (requisition.status !== 'PENDING_HOD') {
                 return res.status(400).send(`Requisition already processed. Current status: ${requisition.status}`);
@@ -761,11 +909,6 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
                 'SELECT * FROM requisitions ORDER BY requestDate DESC' 
             ); 
             
-            // This query in your /director/dashboard route will now catch Finance requests too
-            const [pending] = await db.execute(
-                'SELECT * FROM requisitions WHERE status = "PENDING_DIRECTOR" ORDER BY requestDate DESC'
-            );
-
             //  department statistics
             const [deptStats] = await db.execute(`
                 SELECT 
@@ -805,23 +948,23 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
             const totalValue = parsedAll.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
             
             const stats = { 
-                highValue: parsedAll.filter(r => r.grandTotal > 100000).length,
+            highValue: parsedAll.filter(r => Number(r.grandTotal) > 100000).length,
                 pendingFinance: parsedPending.length,
-                pendingDirector: parsedAll.filter(r => r.status === 'APPR').length,
+                pendingDirector: parsedAll.filter(r => r.status === 'PENDING_DIRECTOR').length,
                 fullyApproved: parsedAll.filter(r => r.status === 'APPROVED').length,
                 rejected: parsedAll.filter(r => r.status.includes('REJECTED')).length,
                 totalValue: totalValue
             }; 
             
         res.render('finance_dashboard', { 
-            
             requisitions: parsedPending,
             allRequisitions: parsedAll,
-            highValue: parsedAll.filter(r => r.grandTotal > 100000).length,
             departmentStats: deptStats,
             departments: departments,
             stats: stats,
-            currentPage: 'finance'
+            currentPage: 'finance',
+            success: req.query.success,
+            error: req.query.error
         });
         } catch (error) { 
             console.error('Error loading finance dashboard:', error); 
@@ -838,7 +981,8 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
                 }, 
                 currentPage: 'finance', 
                 user: req.session.username, 
-                error: "Could not load requisitions" 
+                error: "Could not load requisitions",
+                success: req.query.success
             }); 
         } 
     });
@@ -851,8 +995,17 @@ const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${port}`;
             const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [req.params.id]);
             if (!rows[0]) return res.status(404).send("Requisition not found");
             
-            
             const reqData = parseRequisition(rows[0]);
+            
+            if (reqData.status !== 'PENDING_FINANCE') {
+                return res.status(400).send(`
+                    <div style="text-align:center; margin-top:50px;">
+                        <h2>Requisition Already Processed</h2>
+                        <p>Status: ${reqData.status}</p>
+                        <a href="/finance/dashboard">Back to Dashboard</a>
+                    </div>
+                `);
+            }
             
             res.render('approve_form', { 
                 requisition: reqData, 
@@ -919,7 +1072,7 @@ app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), 
             stage: action === 'approve' ? 'Approved by Finance' : 'Rejected by Finance',
             date: new Date().toISOString(),
             action: action === 'approve' ? 'Approved' : 'Rejected',
-            user: req.session.email || req.session.username, // Fallback to email if username is phased out
+            user: req.session.username || 'Unknown',
             comments: comments || '',
             signature: signaturePath || ''
         });
@@ -930,18 +1083,14 @@ app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), 
             [newStatus, signaturePath, JSON.stringify(history), id]
         );
 
-        // 5. Trigger Emails (Now with fully defined variables)
+        // 5. Trigger Emails
         try {
-            if (requesterEmail) {
-                // Formatting the reference display to follow standard identifier layout (e.g., OCT-6)
-                const displayId = String(id).startsWith('OCT-') ? id : `OCT-${id}`;
-                await triggerWorkflowEmail(displayId, newStatus, requesterEmail, requesterName);
-            }
+            await triggerWorkflowEmail(id, newStatus);
         } catch (mailErr) {
             console.error('❌ Email Notification Failed:', mailErr.message);
         }
 
-        const successMsg = newStatus === '  APPROVED' 
+        const successMsg = newStatus === 'PENDING_DIRECTOR' 
             ? 'Approved and forwarded to Director' 
             : 'Finance approval completed';
 
@@ -960,6 +1109,7 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
             const [pending] = await db.execute(
                 'SELECT * FROM requisitions WHERE status = "PENDING_DIRECTOR" ORDER BY requestDate DESC'
             );
+            const parsedPending = pending.map(r => parseRequisition(r));
         // 1. Get ALL approved requisitions for the table
         const [rows] = await db.execute(
             'SELECT * FROM requisitions WHERE status = ? ORDER BY requestDate DESC',
@@ -995,6 +1145,7 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
         //  High-Level Stats
         const totalSpendAll = deptAmounts.reduce((a, b) => a + b, 0);
         const highValueCount = parsedRequests.filter(r => r.grandTotal > 100000).length;
+        const pendingHighValueCount = parsedPending.filter(r => r.grandTotal > 100000).length;
         const avgSpend = parsedRequests.length > 0 ? (totalSpendAll / parsedRequests.length).toFixed(0) : 0;
 
         console.log(`📊 Dashboard Stats: Total KES ${totalSpendAll}, Depts: ${deptNames.length}`);
@@ -1005,9 +1156,8 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
         res.setHeader('Expires', '0');
 
        
-      // index.js - Inside the /director/dashboard route
     res.render('director_dashboard', { 
-        pendingRequisitions: pending || [],
+        pendingRequisitions: parsedPending || [],
         visibleRequisitions: parsedRequests,
         requisitions: parsedRequests,
         deptNames,
@@ -1016,10 +1166,10 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
         stats: { 
             total: parsedRequests.length, 
             highValue: highValueCount,
+            pendingHighValue: pendingHighValueCount,
             totalSpend: totalSpendAll,
             avgSpend: avgSpend
         },
-        // Add this line to provide a global report timestamp
         reportDate: new Date().toLocaleDateString('en-GB', { 
             day: '2-digit', 
             month: 'short', 
@@ -1029,13 +1179,13 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
         }),
         success: req.query.success,
         error: req.query.error,
-        timestamp: Date.now() // Keep for cache busting
+        timestamp: Date.now()
     });
 
     } catch (error) {
         console.error('❌ Error loading director dashboard:', error);
         res.render('director_dashboard', { 
-            pendingRequisitions: pending || [],
+            pendingRequisitions: [],
             visibleRequisitions: [],
             requisitions: [],
             deptNames: [],
@@ -1055,9 +1205,6 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
 
     app.get('/director/review/:id', isAuthenticated, authorize('director'), async (req, res) => {
         const requisitionId = req.params.id;
-       // const { action, comments } = req.body;
-        const { action, comments } = req.body || {}; 
-        const signatureFile = req.file; 
         try {
             const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [req.params.id]);
             
@@ -1066,6 +1213,16 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
             }
 
             const requisition = parseRequisition(rows[0]);
+
+            if (requisition.status !== 'PENDING_DIRECTOR') {
+                return res.status(400).send(`
+                    <div style="text-align:center; margin-top:50px;">
+                        <h2>Requisition Already Processed</h2>
+                        <p>Status: ${requisition.status}</p>
+                        <a href="/director/dashboard">Back to Dashboard</a>
+                    </div>
+                `);
+            }
 
             res.render('director_review_detail', {
                 role: req.session.role,
@@ -1078,78 +1235,7 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
         }
     });
 
-app.post('/requisition/director-approve/:id', isAuthenticated, authorize('director'), upload.single('signature_file'),async (req, res) => {
-  const requisitionId = req.params.id;
-  // Capture action and comments from the form body
-  const { action, comments } = req.body; 
 
-  try {
-    // 1. Fetch current requisition
-    const [rows] = await db.execute(
-      'SELECT status, history FROM requisitions WHERE id = ?',
-      [requisitionId]
-    );
-
-    if (rows.length === 0) return res.status(404).send("Requisition not found.");
-
-    // 2. Ensure it's in the correct stage
-    if (rows[0].status !== 'PENDING_DIRECTOR') {
-      return res.status(400).send(`Invalid action. Current status is ${rows[0].status}.`);
-    }
-
-    // 3. Handle status branching
-    let newStatus;
-    let historyLabel;
-
-    if (action === 'approve') {
-        // For HOD/Finance, Director is the final step
-        newStatus = 'APPROVED'; 
-        historyLabel = 'Approved by Director';
-    } else {
-        // If rejected, it stops here and goes back to the requester
-        newStatus = 'REJECTED_BY_DIRECTOR';
-        historyLabel = 'Rejected by Director';
-    }
-
-    // 4. Update History
-    let history = [];
-    try {
-      history = JSON.parse(rows[0].history || '[]');
-    } catch { history = []; }
-
-    history.push({
-      stage: 'Director Final Review',
-      action: action === 'approve' ? 'Approved' : 'Rejected',
-      date: new Date().toISOString(),
-      user: req.session.username,
-      comments: comments || 'No comments provided',
-      timestamp: Date.now()
-    });
-
-    // 5. Save to Database
-    await db.execute(
-      'UPDATE requisitions SET status = ?, history = ? WHERE id = ?',
-      [newStatus, JSON.stringify(history), requisitionId]
-    );
-
-    // 6. Notify the requester of the final outcome
-    try {
-        await triggerWorkflowEmail(requisitionId, newStatus);
-    } catch (mailErr) {
-        console.error('❌ Email Notification Failed:', mailErr.message);
-    }
-
-    const successMessage = action === 'approve' 
-        ? 'Requisition fully approved' 
-        : 'Requisition rejected';
-
-    res.redirect(`/director/dashboard?success=${encodeURIComponent(successMessage)}`);
-
-  } catch (error) {
-    console.error('❌ Director Approval Error:', error);
-    res.status(500).send("Internal Server Error.");
-  }
-});
 
 
 
@@ -1176,7 +1262,7 @@ app.post('/requisition/director-approve/:id', isAuthenticated, authorize('direct
 
 
 
-app.get('/download-receipt/:id', async (req, res) => {
+app.get('/download-receipt/:id', isAuthenticated, async (req, res) => {
     try {
         const requisitionId = req.params.id;
 
@@ -1264,12 +1350,24 @@ app.post('/director/submit-approval/:id', isAuthenticated, authorize('director')
         // 2. Destructure fields
         const { action, comments } = req.body || {};
         
-        // 3. Get the filename from Multer (req.file) instead of req.body
-        const signatureFilename = req.file ? req.file.filename : 'signed_on_portal';
+        // 3. Get the signature path (consistent with HOD: /uploads/signatures/filename)
+        const signaturePath = req.file ? `/uploads/signatures/${req.file.filename}` : null;
+
+        if (!action || !['approve', 'reject'].includes(action)) {
+            return res.status(400).send("Invalid action. Must be 'approve' or 'reject'.");
+        }
+
+        if (!req.file && action === 'approve') {
+            return res.status(400).send("Signature is required for approval.");
+        }
 
         // 4. Fetch the existing requisition
         const [rows] = await db.execute('SELECT * FROM requisitions WHERE id = ?', [id]);
         if (rows.length === 0) return res.status(404).send("Requisition not found");
+
+        if (rows[0].status !== 'PENDING_DIRECTOR') {
+            return res.status(400).send(`Invalid action. Current status is ${rows[0].status}.`);
+        }
         
         // 5. Finalize status
         const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED_BY_DIRECTOR';
@@ -1287,13 +1385,13 @@ app.post('/director/submit-approval/:id', isAuthenticated, authorize('director')
             date: new Date().toISOString(),
             user: req.session.username,
             comments: comments || '',
-            signature: signatureFilename // Saving the file name here
+            signature: signaturePath
         });
         
         // 7. Update Database
         await db.execute(
             'UPDATE requisitions SET status = ?, directorSignature = ?, history = ? WHERE id = ?',
-            [newStatus, signatureFilename, JSON.stringify(history), id]
+            [newStatus, signaturePath, JSON.stringify(history), id]
         );
 
         // 8. Email Notification
@@ -1348,42 +1446,4 @@ const server = http.createServer(app);
 
     server.listen(port, hostname, () => {
         console.log(`\n✅ Octagon Portal Active: http://${hostname}:${port}/`);
-        console.log('\n🔐 Login credentials:');
-        console.log('   Username: hod, finance, director, staff, brian');
-        console.log('   Password: password123');
-        console.log('\n📋 Available routes:');
-        console.log('   /login - Login page');
-        console.log('   /home - Staff requisition form');
-        console.log('   /hod/dashboard - HOD dashboard');
-        console.log('   /finance/dashboard - Finance dashboard');
-        console.log('   /director/dashboard - Director dashboard');
-        console.log('\n');
-    });erver = http.createServer(app);
-
-    server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.error(`\n❌ Port ${port} is already in use!`);
-            console.error('\nSolutions:');
-            console.error('1. Kill existing Node processes:');
-            console.error('   Stop-Process -Name node -Force');
-            console.error('\n2. Use a different port:');
-            console.error('   $env:PORT=3001; node index.js');
-            process.exit(1);
-        } else {
-            console.error('Server error:', err);
-        }
-    });
-
-    server.listen(port, hostname, () => {
-        console.log(`\n✅ Octagon Portal Active: http://${hostname}:${port}/`);
-        console.log('\n🔐 Login credentials:');
-        console.log('   Username: hod, finance, director, staff, brian');
-        console.log('   Password: password123');
-        console.log('\n📋 Available routes:');
-        console.log('   /login - Login page');
-        console.log('   /home - Staff requisition form');
-        console.log('   /hod/dashboard - HOD dashboard');
-        console.log('   /finance/dashboard - Finance dashboard');
-        console.log('   /director/dashboard - Director dashboard');
-        console.log('\n');
     });

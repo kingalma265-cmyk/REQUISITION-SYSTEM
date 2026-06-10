@@ -6,17 +6,14 @@ require('dotenv').config();
 // Initialize Nodemailer Transporter
 // If using ZeptoMail SMTP, use: smtppro.zoho.com
 const transporter = nodemailer.createTransport({
-    host: "smtp.zeptomail.com", 
-    port: 465,            // Port 465 is generally more reliable for SSL/TLS
-    secure: true,           // true for 465, false for 587
-    debug: true,            // Include SMTP traffic in the logs
-    logger: true,           // Log communication to the console
+    host: process.env.SMTP_HOST || "smtp.zeptomail.com",
+    port: Number(process.env.SMTP_PORT) || 465,
+    secure: process.env.SMTP_SECURE !== 'false',
     auth: {
-        user: "emailapikey", 
-        pass: "wSsVR61+8hL4B/h0mjWlL+c/mVRdAQikHUV8jFqnunH9Fv+Xocdvlk3JAQLxHfUeQ2RgEzMTorN7y08G1WJYj9kunlkECCiF9mqRe1U4J3x17qnvhDzIXmpekhCKKYsNwwVomWBoFssm+g==", // Use the token from your .env file
+        user: process.env.SMTP_USER || "emailapikey",
+        pass: process.env.SMTP_PASSWORD || "",
     },
     tls: {
-        // Use modern TLS versions, NOT SSLv3
         minVersion: 'TLSv1.2',
         rejectUnauthorized: true
     }
@@ -72,24 +69,33 @@ const sendNotification = async (recipientEmail, recipientName, requisitionId, su
     }
 };
 
-const sendPasswordResetEmail = async (recipientEmail, resetLink) => {
+const sendPasswordResetEmail = async (recipientEmail, otp, tempPassword) => {
     try {
         const mailOptions = {
             from: `"Octagon Requisition System" <support@octagonafrica.com>`,
             to: recipientEmail,
-            subject: "Password Reset Request",
+            subject: "Password Reset OTP",
             html: `
                 <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; max-width: 500px; margin: auto;">
                     <h2 style="color: #0056b3;">Password Reset</h2>
                     <p>You requested a password reset for your Octagon Requisition account.</p>
-                    <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="${resetLink}" 
-                           style="background-color: #0056b3; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                            Reset Password
-                        </a>
+                    <div style="background: #f0f7ff; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px solid #0056b3;">
+                        <p style="font-size: 14px; color: #333; margin-bottom: 10px;">Your One-Time Password (OTP)</p>
+                        <div style="font-size: 36px; font-weight: bold; color: #0056b3; letter-spacing: 8px; margin: 10px 0;">${otp}</div>
+                        <p style="font-size: 12px; color: #666;">Valid for 10 minutes</p>
                     </div>
-                    <p style="font-size: 12px; color: #666;">If you did not request this, please ignore this email.</p>
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p style="font-size: 13px; color: #856404; margin: 0;">
+                            <strong>Temporary Password:</strong> <code style="font-size: 16px; background: #fff; padding: 4px 8px; border-radius: 4px;">${tempPassword}</code>
+                        </p>
+                        <p style="font-size: 12px; color: #856404; margin: 5px 0 0 0;">Use this to log in directly, or use the OTP above to reset your password.</p>
+                    </div>
+                    <div style="text-align: center; margin: 25px 0;">
+                        <p style="font-size: 14px; color: #333;">How to reset:</p>
+                        <p style="font-size: 13px; color: #666;">1. Go to the Verify OTP page<br>2. Enter your email and the OTP above<br>3. Set a new password</p>
+                    </div>
+                    <hr style="border: 0; border-top: 1px solid #eee;">
+                    <p style="font-size: 12px; color: #999; text-align: center;">If you did not request this, please ignore this email.</p>
                 </div>
             `
         };

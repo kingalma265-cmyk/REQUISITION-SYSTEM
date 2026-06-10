@@ -1,39 +1,3 @@
-app.get('/finance/dashboard', async (req, res) => {
-    const user = req.user; // assuming auth middleware
-    const role = user.role;
-
-    // Fetch all requisitions from DB
-    let requisitions = await db.getAllRequisitions(); // adjust to your DB
-
-    let visibleRequisitions = [];
-
-    if (role === 'staff') {
-        // Only their own
-        visibleRequisitions = requisitions.filter(r => 
-            r.staffId === user.id
-        );
-
-    } else if (role === 'hod') {
-        // Own + department
-        visibleRequisitions = requisitions.filter(r => 
-            r.department === user.department
-        );
-
-    } else if (role === 'finance') {
-        // See everything
-        visibleRequisitions = requisitions;
-    }
-
-    res.render('finance_dashboard', {
-        user,
-        role,
-        visibleRequisitions
-    });
-});
-
-
-
-
    <h2>Requisitions Made</h2>
 
 <% if (typeof visibleRequisitions !== 'undefined' && visibleRequisitions.length > 0) { %>

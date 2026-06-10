@@ -13,6 +13,7 @@
             height: 100vh;
             background-color: #f1f5f9;
             margin: 0;
+            font-family: Arial, sans-serif;
         }
 
         .login-card {
@@ -96,8 +97,6 @@
             font-size: 0.85rem;
             margin-bottom: 16px;
         }
-<<<<<<< HEAD
-=======
 
         .success-msg {
             color: #15803d;
@@ -107,11 +106,57 @@
             font-size: 0.85rem;
             margin-bottom: 16px;
         }
->>>>>>> fc765db (Commiting latest changes to the main branch)
+
+        .otp-input {
+            font-size: 1.5rem;
+            letter-spacing: 8px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .tab-bar {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #64748b;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+            font-size: 0.9rem;
+        }
+
+        .tab.active {
+            color: #1e3a8a;
+            border-bottom-color: #1e3a8a;
+        }
+
+        .tab:hover {
+            color: #1e3a8a;
+        }
+
+        .info-box {
+            background: #f0f7ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+            color: #1e40af;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
-
     <div class="login-card">
         <img src="/Images/octagon-logo.png" id="logo" alt="Octagon Africa">
         <h2>Welcome Back</h2>
@@ -121,35 +166,20 @@
             <div class="error-msg"><%= error %></div>
         <% } %>
 
-<<<<<<< HEAD
-        <form action="/login" method="POST">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" name="username" id="username" required placeholder="e.g. brian.wekesa">
-=======
-        <% if (locals.success) { %>
-            <div class="success-msg"><%= success %></div>
-        <% } %>
-
         <form action="/login" method="POST">
             <div class="form-group">
                 <label for="email">Email Address</label>
                 <input type="email" name="email" id="email" required placeholder="e.g. brian.wekesa@octagonafrica.com">
->>>>>>> fc765db (Commiting latest changes to the main branch)
             </div>
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" name="password" id="password" required placeholder="••••••••">
+                <input type="password" name="password" id="password" required placeholder="Enter your password">
             </div>
 
             <button type="submit" class="btn-login">Sign In</button>
         </form>
-<<<<<<< HEAD
-=======
-        <p style="text-align: center; margin-top: 20px;" href="/forgot-password">Forgot your password? <a href="/forgot-password" style="color: #1e3a8a; text-decoration: none;">Reset it here</a></p>
->>>>>>> fc765db (Commiting latest changes to the main branch)
+        <p style="text-align: center; margin-top: 20px;">Forgot your password? <a href="/forgot-password" style="color: #1e3a8a; text-decoration: none;">Reset it here</a></p>
     </div>
-
 </body>
 </html>

@@ -1,15 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-<<<<<<< HEAD
-    <title>HOD Approval - Requisition <%= requisition.id %></title>
-    <link rel="stylesheet" href="/styles/approve_form.css">
-    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
-=======
     <title>HOD Approval - Requisition OCT #<%= requisition.id %></title>
     <link rel="stylesheet" href="/styles/approve_form.css">
     <!-- <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script> -->
->>>>>>> fc765db (Commiting latest changes to the main branch)
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -82,9 +76,6 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-<<<<<<< HEAD
-        #signature-pad {
-=======
         #signature-file {
             padding: 10px;
             border: 1px dashed #bbb;
@@ -93,18 +84,13 @@
              box-sizing: border-box;
         }
         /* #signature-pad {
->>>>>>> fc765db (Commiting latest changes to the main branch)
             border: 2px solid #ddd;
             border-radius: 4px;
             width: 100%;
             max-width: 400px;
             height: 200px;
             background: white;
-<<<<<<< HEAD
-        }
-=======
         } */
->>>>>>> fc765db (Commiting latest changes to the main branch)
         .btn {
             padding: 10px 20px;
             margin: 10px 10px 0 0;
@@ -195,11 +181,7 @@
 
     
     <div class="summary-box">
-<<<<<<< HEAD
-        <p><strong>Requisition ID:</strong> <%= requisition.id %></p>
-=======
         <p><strong>Requisition ID:</strong> OCT #<%= requisition.id %></p>
->>>>>>> fc765db (Commiting latest changes to the main branch)
         <p><strong>Staff:</strong> <%= requisition.staffName || 'Unknown' %></p>
         <p><strong>Department:</strong> <%= requisition.department || 'N/A' %></p>
         <p><strong>Date:</strong> <%= requisition.requestDate ? new Date(requisition.requestDate).toLocaleDateString() : 'N/A' %></p>
@@ -285,105 +267,6 @@
         </tbody>
     </table>
 
-<<<<<<< HEAD
-    <form id="approvalForm" action="/<%= role %>/submit-approval/<%= requisition.id %>" method="POST">
-        <div class="approval-container">
-            <h3><%= role === 'hod' ? 'HOD' : (role === 'finance' ? 'Finance' : 'Director') %> Action</h3>
-            <p>Please sign below to approve or reject this requisition:</p>
-            <canvas id="signature-pad" style="border: 2px solid #ddd; border-radius: 4px; width: 100%; max-width: 400px; height: 200px; background: white;"></canvas>
-            <input type="hidden" name="signature" id="signature-db">
-            <input type="hidden" name="action" id="action-input">
-            
-            <div class="button-group">
-                <button type="button" id="clear-btn" class="btn btn-clear">Clear Signature</button>
-                <button type="submit" id="approve-btn" class="btn btn-approve">✓ Approve</button>
-                <button type="submit" id="reject-btn" class="btn btn-reject">✗ Reject</button>
-            </div>
-            
-            <div class="form-group">
-                <label for="comments">Comments (Optional):</label>
-                <textarea name="comments" id="comments" rows="3" style="width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;" required></textarea>
-            </div>
-        </div>
-    </form>
-
-    <script>
-        // Initialize signature pad
-        const canvas = document.getElementById('signature-pad');
-        const signaturePad = new SignaturePad(canvas, {
-            backgroundColor: 'rgb(255, 255, 255)',
-            penColor: 'rgb(0, 0, 0)',
-            minWidth: 1,
-            maxWidth: 2
-        });
-
-        // Adjust canvas resolution for high-DPI screens
-        function resizeCanvas() {
-            const ratio = Math.max(window.devicePixelRatio || 1, 1);
-            canvas.width = canvas.offsetWidth * ratio;
-            canvas.height = canvas.offsetHeight * ratio;
-            canvas.getContext("2d").scale(ratio, ratio);
-            signaturePad.clear();
-        }
-
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-
-        // Clear button functionality
-        const clearBtn = document.getElementById('clear-btn');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', function() {
-                signaturePad.clear();
-            });
-        }
-
-        // Handle form submission with different actions
-        const form = document.getElementById('approvalForm');
-        const approveBtn = document.getElementById('approve-btn');
-        const rejectBtn = document.getElementById('reject-btn');
-        const actionInput = document.getElementById('action-input');
-
-        function submitForm(action) {
-            // Check if signature is provided
-            if (signaturePad.isEmpty()) {
-                alert('Please provide your signature before submitting.');
-                return false;
-            }
-            
-            // Convert signature to Base64
-            const signatureDataURL = signaturePad.toDataURL('image/png');
-            document.getElementById('signature-db').value = signatureDataURL;
-            
-            // Set the action
-            actionInput.value = action;
-            
-            // Confirm action
-            const confirmMessage = action === 'approve' 
-                ? 'Are you sure you want to APPROVE this requisition?' 
-                : 'Are you sure you want to REJECT this requisition? This action cannot be undone.';
-            
-            if (confirm(confirmMessage)) {
-                form.submit();
-            }
-            
-            return false;
-        }
-
-        if (approveBtn) {
-            approveBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                submitForm('approve');
-            });
-        }
-
-        if (rejectBtn) {
-            rejectBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                submitForm('reject');
-            });
-        }
-    </script>
-=======
    <form id="approvalForm" action="/<%= role %>/submit-approval/<%= requisition.id %>" method="POST" enctype="multipart/form-data">
     <div class="approval-container">
         <h3><%= role.toUpperCase() %> Action</h3>
@@ -449,6 +332,5 @@
             }
 
         </script>
->>>>>>> fc765db (Commiting latest changes to the main branch)
 </body>
 </html>

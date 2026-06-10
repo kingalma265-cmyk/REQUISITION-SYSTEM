@@ -151,7 +151,7 @@
     
     <h2>Pending Requisitions</h2>
     
-    <% if (requisitions && requisitions.length > 0) { %>
+    <% if (pendingHODRequisitions && pendingHODRequisitions.length > 0) { %>
         <table>
             <thead>
                 <tr>
@@ -165,59 +165,25 @@
                 </tr>
             </thead>
             <tbody>
-                <% requisitions.forEach(function(req) { 
-                    // SAFE CALCULATION - handles both string and array
-                    let total = 0;
-                    
-                    if (req.items) {
-                        try {
-                            // Check if items is a string, parse it
-                            let itemsArray = req.items;
-                            if (typeof req.items === 'string') {
-                                itemsArray = JSON.parse(req.items);
-                            }
-                            
-                            // Calculate total if it's an array
-                            if (Array.isArray(itemsArray)) {
-                                total = itemsArray.reduce(function(sum, item) {
-                                    return sum + (Number(item.total) || Number(item.qty) * Number(item.unitPrice) || 0);
-                                }, 0);
-                            } else if (req.grandTotal) {
-                                total = Number(req.grandTotal);
-                            }
-                        } catch(e) {
-                            console.error('Error parsing items:', e);
-                            total = Number(req.grandTotal) || 0;
-                        }
-                    } else if (req.grandTotal) {
-                        total = Number(req.grandTotal);
-                    }
-                    
-                    // Get status display
-                    let statusDisplay = req.status;
-                    if (req.status === 'PENDING_HOD') statusDisplay = 'Pending HOD';
-                    if (req.status === 'PENDING_FINANCE') statusDisplay = 'Pending Finance';
-                    if (req.status === 'PENDING_DIRECTOR') statusDisplay = 'Pending Director';
+                <% pendingHODRequisitions.forEach(function(req) { 
+                    let statusDisplay = 'Pending HOD';
                 %>
                 <tr>
                     <td><%= req.id %></td>
                     <td><%= req.staffName %></td>
                     <td><%= req.department || 'N/A' %></td>
                     <td><%= new Date(req.requestDate).toLocaleDateString() %></td>
-                    
-                    <strong><b><td class="<%= (req.grandTotal > 100000) ? 'high-value' : '' %>">
+                    <td class="<%= (Number(req.grandTotal) > 100000) ? 'high-value' : '' %>">
                         KES <%= Number(req.grandTotal || 0).toLocaleString(undefined, {
                             minimumFractionDigits: 2, 
                             maximumFractionDigits: 2
                         }) %>
-                    </td></b></strong>
+                    </td>
                     <td><span style="background: #ff9800; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px;"><%= statusDisplay %></span></td>
                    <td>
-                    <a href="/hod/approval/<%= req.id %>" class="btn-review">
-                        Review
-                    </a>
+                    <a href="/hod/approval/<%= req.id %>" class="btn-review">Review</a>
                     </td>
-                         </tr>
+                </tr>
                 <% }); %>
             </tbody>
         </table>
@@ -225,6 +191,86 @@
         <div style="margin: 20px; padding: 20px; background: white; border-radius: 8px; text-align: center;">
             <p>✅ No pending requisitions to review.</p>
         </div>
+    <% } %>
+
+    <% if (inProgressRequisitions && inProgressRequisitions.length > 0) { %>
+    <h2>In Progress Requisitions</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Staff Name</th>
+                <th>Department</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% inProgressRequisitions.forEach(function(req) { %>
+            <tr>
+                <td><%= req.id %></td>
+                <td><%= req.staffName %></td>
+                <td><%= req.department || 'N/A' %></td>
+                <td>KES <%= Number(req.grandTotal || 0).toLocaleString() %></td>
+                <td><span style="background: #0071bc; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px;"><%= req.status %></span></td>
+                <td><a href="/requisition/view/<%= req.id %>" class="btn-review">View</a></td>
+            </tr>
+            <% }); %>
+        </tbody>
+    </table>
+    <% } %>
+
+    <% if (approvedRequisitions && approvedRequisitions.length > 0) { %>
+    <h2>Approved Requisitions</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Staff Name</th>
+                <th>Department</th>
+                <th>Total</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% approvedRequisitions.forEach(function(req) { %>
+            <tr>
+                <td><%= req.id %></td>
+                <td><%= req.staffName %></td>
+                <td><%= req.department || 'N/A' %></td>
+                <td>KES <%= Number(req.grandTotal || 0).toLocaleString() %></td>
+                <td><a href="/requisition/view/<%= req.id %>" class="btn-review">View</a></td>
+            </tr>
+            <% }); %>
+        </tbody>
+    </table>
+    <% } %>
+
+    <% if (rejectedRequisitions && rejectedRequisitions.length > 0) { %>
+    <h2>Rejected Requisitions</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Staff Name</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% rejectedRequisitions.forEach(function(req) { %>
+            <tr>
+                <td><%= req.id %></td>
+                <td><%= req.staffName %></td>
+                <td>KES <%= Number(req.grandTotal || 0).toLocaleString() %></td>
+                <td><span style="background: #d9534f; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px;"><%= req.status %></span></td>
+                <td><a href="/requisition/view/<%= req.id %>" class="btn-review">View</a></td>
+            </tr>
+            <% }); %>
+        </tbody>
+    </table>
     <% } %>
 
    

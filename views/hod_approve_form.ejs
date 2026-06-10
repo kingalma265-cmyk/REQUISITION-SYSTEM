@@ -1,15 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-<<<<<<< HEAD
-    <title>HOD Approval - Requisition <%= requisition.id %></title>
-    <link rel="stylesheet" href="/styles/approve_form.css">
-    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
-=======
     <title>HOD Approval - Requisition OCT #<%= requisition.id %></title>
     <link rel="stylesheet" href="/styles/approve_form.css">
     <!-- <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script> -->
->>>>>>> fc765db (Commiting latest changes to the main branch)
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -169,11 +163,8 @@
         <h2><%= role === 'hod' ? 'HOD' : (role === 'finance' ? 'FINANCE' : 'DIRECTOR') %> APPROVAL INTERFACE</h2>
     </div>
 
-<<<<<<< HEAD
-=======
     <h2> Hello there</h2>
 
->>>>>>> fc765db (Commiting latest changes to the main branch)
     <!-- <nav class="main-nav">
         <a href="/">New Requisition</a>
         <a href="/hod/dashboard">HOD Dashboard</a>
@@ -185,11 +176,7 @@
 
     
     <div class="summary-box">
-<<<<<<< HEAD
-        <p><strong>Requisition ID:</strong> <%= requisition.id %></p>
-=======
         <p><strong>Requisition ID:</strong> OCT #<%= requisition.id %></p>
->>>>>>> fc765db (Commiting latest changes to the main branch)
         <p><strong>Staff:</strong> <%= requisition.staffName || 'Unknown' %></p>
         <p><strong>Department:</strong> <%= requisition.department || 'N/A' %></p>
         <p><strong>Date:</strong> <%= requisition.requestDate ? new Date(requisition.requestDate).toLocaleDateString() : 'N/A' %></p>
@@ -274,19 +261,13 @@
             <% } %>
         </tbody>
     </table>
-<<<<<<< HEAD
-=======
     <h1>Helo there</h1>
->>>>>>> fc765db (Commiting latest changes to the main branch)
 
     <form id="approvalForm" action="/<%= role %>/submit-approval/<%= requisition.id %>" method="POST">
         <div class="approval-container">
             <h3><%= role === 'hod' ? 'HOD' : (role === 'finance' ? 'Finance' : 'Director') %> Action</h3>
             <p>Please sign below to approve or reject this requisition:</p>
-<<<<<<< HEAD
-=======
             <input type="file" name="upload" placeholder="signature">s
->>>>>>> fc765db (Commiting latest changes to the main branch)
             <canvas id="signature-pad" style="border: 2px solid #ddd; border-radius: 4px; width: 100%; max-width: 400px; height: 200px; background: white;"></canvas>
             <input type="hidden" name="signature" id="signature-db">
             <input type="hidden" name="action" id="action-input">

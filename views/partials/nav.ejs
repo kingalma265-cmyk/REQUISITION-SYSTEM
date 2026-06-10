@@ -1,24 +1,18 @@
-<head>
-    <link rel="stylesheet" href="/index.css">
-</head>
+
 
 
 <nav class="main-nav">
     <a href="/home" class="<%= (locals.currentPage === 'new') ? 'active' : '' %>">Home</a>
-    <a href="/hod/dashboard" class="<%= (locals.currentPage === 'hod') ? 'active' : '' %>">HOD Dashboard</a>
-    <a href="/finance/dashboard" class="<%= (locals.currentPage === 'finance') ? 'active' : '' %>">Finance</a>
-    <a href="/director/dashboard" class="<%= (locals.currentPage === 'director') ? 'active' : '' %>">Director</a>
-<<<<<<< HEAD
-    
-    <div class="nav-user-info">
-        
-         <a href="/logout" class="logout-link" style="color:red;">Logout</a>
-       
-       
-    </div>
-=======
+    <% if (locals.user && locals.user.role === 'hod') { %>
+        <a href="/hod/dashboard" class="<%= (locals.currentPage === 'hod') ? 'active' : '' %>">HOD Dashboard</a>
+    <% } %>
+    <% if (locals.user && locals.user.role === 'finance') { %>
+        <a href="/finance/dashboard" class="<%= (locals.currentPage === 'finance') ? 'active' : '' %>">Finance</a>
+    <% } %>
+    <% if (locals.user && locals.user.role === 'director') { %>
+        <a href="/director/dashboard" class="<%= (locals.currentPage === 'director') ? 'active' : '' %>">Director</a>
+    <% } %>
     <a href="/logout" class="logout-link" style="color:red;">Logout</a>
->>>>>>> fc765db (Commiting latest changes to the main branch)
 </nav>
 <style>
 .p{
@@ -50,9 +44,6 @@
         margin: 0.25rem 0;
     }
 }
-<<<<<<< HEAD
-</style>
-=======
 </style>
 
 
@@ -81,4 +72,3 @@
             }
         }
     %> -->
->>>>>>> fc765db (Commiting latest changes to the main branch)

@@ -1,66 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-<<<<<<< HEAD
-    <title>Review Requisition #<%= requisition.id %></title>
-    <link rel="stylesheet" href="/css/style.css"> <style>
-        .detail-container { margin: 20px; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .item-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        .item-table th, .item-table td { border: 1px solid #eee; padding: 12px; text-align: left; }
-        .decision-box { margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 5px; }
-        .btn-approve { background: #28a745; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; }
-        .btn-reject { background: #dc3545; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; }
-        textarea { width: 100%; margin-top: 10px; padding: 10px; }
-    </style>
-</head>
-<body>
-    <div class="detail-container">
-        <h1>Requisition Review: #<%= requisition.id %></h1>
-        <p><strong>Staff Name:</strong> <%= requisition.staffName %></p>
-        <p><strong>Department:</strong> <%= requisition.department %></p>
-        <p><strong>Date Requested:</strong> <%= new Date(requisition.requestDate).toLocaleDateString() %></p>
-
-        <table class="item-table">
-            <thead>
-                <tr style="background: #0071bc; color: white;">
-                    <th>Description</th>
-                    <th>Qty</th>
-                    <th>Unit Price (KES)</th>
-                    <th>Total (KES)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <% requisition.items.forEach(item => { %>
-                <tr>
-                    <td><%= item.description %></td>
-                    <td><%= item.qty %></td>
-                    <td><%= Number(item.unitPrice).toLocaleString() %></td>
-                    <td><%= Number(item.total).toLocaleString() %></td>
-                </tr>
-                <% }) %>
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="3" style="text-align: right;"><strong>Grand Total:</strong></td>
-                    <td><strong>KES <%= Number(requisition.grandTotal).toLocaleString() %></strong></td>
-                </tr>
-            </tfoot>
-        </table>
-
-        <div class="decision-box">
-            <h3>Director's Decision</h3>
-            <form action="/director/submit-approval/<%= requisition.id %>" method="POST">
-                <label>Comments/Reason:</label>
-                <textarea name="comments" rows="3" placeholder="Add a note..."></textarea>
-                
-                <div style="margin-top: 15px;">
-                    <button type="submit" name="action" value="approve" class="btn-approve">Final Approve</button>
-                    <button type="submit" name="action" value="reject" class="btn-reject">Reject</button>
-                </div>
-            </form>
-        </div>
-    </div>
-=======
     <title><%= user.role === 'hod' ? 'HOD' : (user.role === 'finance' ? 'Finance' : 'Director') %> Approval - Requisition OCT #<%= requisition.id %></title>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <link rel="stylesheet" href="/styles/approve_form.css">
@@ -322,8 +262,8 @@
                 <td><%= item.description || 'N/A' %></td>
                 <td><%= item.qty || 0 %></td>
                 <td>KES <%= (Number(item.unitPrice) || 0).toFixed(2) %></td>
-               <td style="padding: 12px;" class="<%= requisition.grandTotal > 100000 ? 'high-value' : '' %>">
-                    KES <%= Number(requisition.grandTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
+               <td style="padding: 12px;">
+                    KES <%= Number(itemTotal).toLocaleString(undefined, {minimumFractionDigits: 2}) %>
                 </td>
             </tr>
             <% }); } else { %>
@@ -338,7 +278,7 @@
     <!-- <form id="approvalForm" action="/<%= user.role %>/director-approve/<%= requisition.id %>" method="POST" enctype="multipart/form-data">
          -->
         <form id="approvalForm"
-      action="/requisition/director-approve/<%= requisition.id %>"
+      action="/director/submit-approval/<%= requisition.id %>"
       method="POST"
       enctype="multipart/form-data">
         <div class="approval-container">
@@ -373,8 +313,10 @@
 
             // 1. Validate that a file is selected
             if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Please upload your signature attachment before submitting.');
-                return;
+                if (action === 'approve') {
+                    alert('Please upload your signature before approving.');
+                    return;
+                }
             }
 
             // 2. Set the action value ('approve' or 'reject')
@@ -394,6 +336,5 @@
         document.getElementById('approve-btn').addEventListener('click', (e) => handleSubmission(e, 'approve'));
         document.getElementById('reject-btn').addEventListener('click', (e) => handleSubmission(e, 'reject'));
     </script>
->>>>>>> fc765db (Commiting latest changes to the main branch)
 </body>
 </html>

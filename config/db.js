@@ -16,7 +16,7 @@ const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || 'root',          // Your MySQL username
-  password: process.env.DB_PASSWORD || '', // Your MySQL password
+  password: process.env.DB_PASSWORD || 'root123', // Your MySQL password
   database: process.env.DB_NAME || 'octagon_requisition',
   waitForConnections: true,
   connectionLimit: 10,
