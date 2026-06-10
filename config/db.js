@@ -1,38 +1,102 @@
-// const mysql = require('mysql2');
+const { Pool } = require('pg');
 
-// const pool = mysql.createPool({
-//     host: 'localhost',
-//     user: 'root',      // Your MySQL username
-//     password: 'yourpassword', 
-//     database: 'octagon_db'
-// });
-
-// module.exports = pool.promise();
-
-const mysql = require('mysql2');
-
-// Create the connection pool
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || 'root',          // Your MySQL username
-  password: process.env.DB_PASSWORD || 'root123', // Your MySQL password
-  database: process.env.DB_NAME || 'octagon_requisition',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
 });
 
-console.log('DB: connecting with', {
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || 'root',
-  database: process.env.DB_NAME || 'octagon_requisition'
-});
+console.log('DB: connecting to PostgreSQL via DATABASE_URL');
 
-if ((process.env.DB_PASSWORD || '') === '') {
-  console.warn('DB WARNING: replace config/db.js password with your real MySQL password or set DB_PASSWORD env var.');
+// Map MySQL-style camelCase column names to lowercase for PostgreSQL compatibility
+// PostgreSQL stores unquoted identifiers as lowercase
+function normalizeRows(rows) {
+  if (!rows || !Array.isArray(rows)) return rows;
+  return rows.map(row => {
+    if (!row || typeof row !== 'object') return row;
+    const normalized = {};
+    for (const [key, val] of Object.entries(row)) {
+      // Keep the original key but also add the camelCase version
+      normalized[key] = val;
+    }
+    // Map common camelCase field names from their lowercase PG versions
+    const camelMappings = {
+      staffname: 'staffName',
+      requestdate: 'requestDate',
+      grandtotal: 'grandTotal',
+      hodsignature: 'hodSignature',
+      financesignature: 'financeSignature',
+      directorsignature: 'directorSignature',
+      created_at: 'created_at',
+      updated_at: 'updated_at',
+      password_hash: 'password_hash',
+      must_reset_password: 'must_reset_password',
+      reset_password_token: 'reset_password_token',
+      reset_password_expires: 'reset_password_expires',
+      otp_code: 'otp_code',
+      otp_expires: 'otp_expires',
+      signature_path: 'signature_path'
+    };
+    for (const [lcKey, ccKey] of Object.entries(camelMappings)) {
+      if (lcKey in normalized && !(ccKey in normalized)) {
+        normalized[ccKey] = normalized[lcKey];
+      }
+    }
+    return normalized;
+  });
 }
 
-// Export the promise-based version for async/await
-module.exports = pool.promise();
+function convertSql(sql) {
+  let pg = sql;
+
+  // Convert MySQL ? placeholders to PostgreSQL $1, $2, ...
+  let i = 0;
+  pg = pg.replace(/\?/g, () => `$${++i}`);
+
+  // Remove MySQL backtick quoting
+  pg = pg.replace(/`([^`]+)`/g, '$1');
+
+  // Convert DATETIME to TIMESTAMP
+  pg = pg.replace(/\bDATETIME\b/gi, 'TIMESTAMP');
+
+  // Convert TINYINT(1) to SMALLINT
+  pg = pg.replace(/TINYINT\(\d\)/gi, 'SMALLINT');
+
+  // Convert MySQL double-quote string literals to single quotes
+  // Only convert "string" that looks like a string value (not identifiers)
+  // Handle: WHERE status = "PENDING_DIRECTOR"
+  pg = pg.replace(/= "([^"]+)"/g, "= '$1'");
+
+  // Convert IFNULL to COALESCE
+  pg = pg.replace(/\bIFNULL\s*\(/gi, 'COALESCE(');
+
+  // Convert department != "" to department != ''
+  pg = pg.replace(/!= ""/g, "!= ''");
+
+  // Quote camelCase column names in SQL so PostgreSQL preserves case
+  const camelCols = ['staffName', 'requestDate', 'grandTotal', 'hodSignature', 'financeSignature', 'directorSignature'];
+  for (const col of camelCols) {
+    // Match the column name when used as an identifier (not inside quotes already)
+    const re = new RegExp(`(?<!['"\\w])${col}(?!['"\\w])`, 'g');
+    pg = pg.replace(re, `"${col}"`);
+  }
+
+  return pg;
+}
+
+module.exports = {
+  execute: async (sql, params = []) => {
+    const pgSql = convertSql(sql);
+    try {
+      const result = await pool.query(pgSql, params);
+      const rows = normalizeRows(result.rows);
+      return [rows, result.fields];
+    } catch (err) {
+      console.error('DB Error:', err.message);
+      console.error('SQL:', pgSql);
+      throw err;
+    }
+  },
+  end: async () => {
+    await pool.end();
+  },
+  pool
+};

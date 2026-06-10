@@ -17,8 +17,8 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
 
         
     const app = express();
-    const hostname = '127.0.0.1';
-    const port = process.env.PORT || 3000;
+    const hostname = '0.0.0.0';
+    const port = process.env.PORT || 5000;
     const multer = require('multer');
     const { triggerWorkflowEmail } = require('./utils/notifications');
     
@@ -100,19 +100,22 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
     const ensureResetColumns = async () => {
-        try {
-            await db.execute(`
-                ALTER TABLE users
-                ADD COLUMN IF NOT EXISTS \`reset_password_token\` VARCHAR(255) DEFAULT NULL,
-                ADD COLUMN IF NOT EXISTS \`reset_password_expires\` DATETIME DEFAULT NULL,
-                ADD COLUMN IF NOT EXISTS \`must_reset_password\` TINYINT(1) NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS \`otp_code\` VARCHAR(6) DEFAULT NULL,
-                ADD COLUMN IF NOT EXISTS \`otp_expires\` DATETIME DEFAULT NULL
-            `);
-            console.log('DB: ensured password reset and OTP columns exist.');
-        } catch (migrationError) {
-            console.log('DB: password reset/OTP column migration note:', migrationError.message || migrationError);
+        const alterStatements = [
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_password_token VARCHAR(255) DEFAULT NULL`,
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_password_expires TIMESTAMP DEFAULT NULL`,
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS must_reset_password SMALLINT NOT NULL DEFAULT 0`,
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code VARCHAR(6) DEFAULT NULL`,
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires TIMESTAMP DEFAULT NULL`,
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_path VARCHAR(255) DEFAULT NULL`
+        ];
+        for (const stmt of alterStatements) {
+            try {
+                await db.execute(stmt);
+            } catch (e) {
+                // Ignore if column already exists
+            }
         }
+        console.log('DB: ensured password reset and OTP columns exist.');
     };
 
     ensureResetColumns();
@@ -652,8 +655,8 @@ app.post('/login', async (req, res) => {
         }];
 
         // 3. Database Insert
-        const [result] = await db.execute(
-            'INSERT INTO requisitions (staffName, requestDate, department, items, grandTotal, status, history) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        const [insertRows] = await db.execute(
+            'INSERT INTO requisitions ("staffName", "requestDate", department, items, "grandTotal", status, history) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
             [
                 staffName || req.session.username, 
                 requestDate || new Date(), 
@@ -665,7 +668,7 @@ app.post('/login', async (req, res) => {
             ]
         );
 
-        const requisitionId = result.insertId;
+        const requisitionId = insertRows[0].id;
 
         // 4. Trigger Email
         try {
