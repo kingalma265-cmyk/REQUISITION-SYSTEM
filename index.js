@@ -8,7 +8,25 @@ const path = require('path');
 const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
     const ejs = require('ejs');
     const http = require('http');
-    const html_to_pdf = require('html-pdf-node');
+    const puppeteer = require('puppeteer-core');
+    const { execSync } = require('child_process');
+
+    // Dynamically locate Chromium (works across nix hash changes)
+    function findChromium() {
+        if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
+        try {
+            const found = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null || echo ""').toString().trim();
+            if (found) return found;
+        } catch(e) {}
+        // fallback: search nix store
+        try {
+            const nixPath = execSync('find /nix/store -maxdepth 3 -name "chromium" -type f 2>/dev/null | head -1').toString().trim();
+            if (nixPath) return nixPath;
+        } catch(e) {}
+        return null;
+    }
+    const CHROMIUM_EXEC = findChromium();
+    console.log('Chromium path:', CHROMIUM_EXEC || 'NOT FOUND');
     
     // Load and encode logo as base64 for embedding in PDFs
     const fs = require('fs');
@@ -1038,16 +1056,18 @@ app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), 
         const [rows] = await db.execute(`
             SELECT 
                 r.*, 
-                u.role AS requesterRole, 
-                u.email AS requesterEmail, 
-                u.username AS requesterName
+                u.role AS "requesterRole", 
+                u.email AS "requesterEmail", 
+                u.username AS "requesterName"
             FROM requisitions r 
-            JOIN users u ON r.staffName = u.username 
+            LEFT JOIN users u ON r."staffName" = u.username 
             WHERE r.id = ?`, [id]);
 
         if (rows.length === 0) return res.status(404).send("Requisition not found");
         
-        const { requesterRole, requesterEmail, requesterName } = rows[0];
+        const requesterRole = rows[0].requesterRole || rows[0].requesterrole || 'staff';
+        const requesterEmail = rows[0].requesterEmail || rows[0].requesteremail || '';
+        const requesterName = rows[0].requesterName || rows[0].requestername || rows[0].staffName || '';
         let newStatus;
 
         
@@ -1321,17 +1341,32 @@ app.get('/download-receipt/:id', isAuthenticated, async (req, res) => {
                 return res.status(500).send("Template Error");
             }
             
+            let browser;
             try {
-                const pdfBuffer = await html_to_pdf.generatePdf(
-                    { content: html }, 
-                    { format: 'A4', printBackground: true }
-                );
+                if (!CHROMIUM_EXEC) throw new Error('Chromium not found. Please ensure chromium is installed.');
+                browser = await puppeteer.launch({
+                    executablePath: CHROMIUM_EXEC,
+                    headless: true,
+                    args: [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu'
+                    ]
+                });
+                const page = await browser.newPage();
+                await page.setContent(html, { waitUntil: 'networkidle0' });
+                const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+                await browser.close();
+                browser = null;
                 
                 res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `inline; filename="requisition-${requisitionId}.pdf"`);
                 res.send(pdfBuffer);
             } catch (pdfError) {
+                if (browser) { try { await browser.close(); } catch(e) {} }
                 console.error('PDF Generation Failed:', pdfError);
-                res.status(500).send("PDF Generation Failed");
+                res.status(500).send(`PDF Generation Failed: ${pdfError.message}`);
             }
         });
 
