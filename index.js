@@ -620,13 +620,13 @@ app.post('/login', async (req, res) => {
         const userRole = req.session.role;
 
         if (userRole === 'hod') {
-            newStatus = 'PENDING_DIRECTOR';
-            workflowStage = 'Prepared by HOD (Sent to Director)';
+            newStatus = 'PENDING_FINANCE';
+            workflowStage = 'Prepared by HOD (Sent to Finance for review)';
         }
 
         if (userRole === 'finance') {
             newStatus = 'PENDING_DIRECTOR';
-            workflowStage = 'Prepared by Finance (Sent to Director)';
+            workflowStage = 'Prepared by Finance Staff (Sent to Director)';
         }
 
 
