@@ -627,19 +627,9 @@ app.post('/login', async (req, res) => {
         const { requestDate, grandTotal, staffName } = req.body;
         const department = req.session.department;
         
+        // All requisitions always start at HOD regardless of who submits
         let newStatus = 'PENDING_HOD'; 
-        let workflowStage = 'Prepared';
-        const userRole = req.session.role;
-
-        if (userRole === 'hod') {
-            newStatus = 'PENDING_FINANCE';
-            workflowStage = 'Prepared by HOD (Sent to Finance for review)';
-        }
-
-        if (userRole === 'finance') {
-            newStatus = 'PENDING_DIRECTOR';
-            workflowStage = 'Prepared by Finance Staff (Sent to Director)';
-        }
+        let workflowStage = 'Submitted — Pending HOD Approval';
 
 
         // Normalize fields (ensure arrays)
@@ -1084,13 +1074,8 @@ app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), 
 
         
         if (action === 'approve') {
-            if (requesterRole === 'staff') {
-                // Regular staff process ends here at Finance
-                newStatus = 'APPROVED'; 
-            } else {
-                // HODs and Finance staff must go to the Director for final sign-off
-                newStatus = 'PENDING_DIRECTOR';
-            }
+            // Finance is the final approver — all requisitions end here
+            newStatus = 'APPROVED';
         } else {
             newStatus = 'REJECTED_BY_FINANCE';
         }
@@ -1125,9 +1110,7 @@ app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), 
             console.error('❌ Email Notification Failed:', mailErr.message);
         }
 
-        const successMsg = newStatus === 'PENDING_DIRECTOR' 
-            ? 'Approved and forwarded to Director' 
-            : 'Finance approval completed';
+        const successMsg = 'Requisition fully approved';
 
         res.redirect(`/finance/dashboard?success=${encodeURIComponent(successMsg)}`);
 
