@@ -15,13 +15,8 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
     function findChromium() {
         if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
         try {
-            const found = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null || echo ""').toString().trim();
+            const found = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null || echo ""', { timeout: 3000 }).toString().trim();
             if (found) return found;
-        } catch(e) {}
-        // fallback: search nix store
-        try {
-            const nixPath = execSync('find /nix/store -maxdepth 3 -name "chromium" -type f 2>/dev/null | head -1').toString().trim();
-            if (nixPath) return nixPath;
         } catch(e) {}
         return null;
     }
@@ -690,8 +685,8 @@ app.post('/login', async (req, res) => {
         }];
 
         // 3. Database Insert
-        const [insertRows] = await db.execute(
-            'INSERT INTO requisitions (staffName, requestDate, department, items, grandTotal, status, history) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        const [insertRows] = await db.executeInsert(
+            'INSERT INTO requisitions ("staffName", "requestDate", department, items, "grandTotal", status, history) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
                 staffName || req.session.username, 
                 requestDate || new Date(), 
@@ -703,7 +698,7 @@ app.post('/login', async (req, res) => {
             ]
         );
 
-        const requisitionId = insertRows.insertId;
+        const requisitionId = insertRows.insertId || (insertRows[0] && insertRows[0].id);
 
         // 4. Trigger Email
         try {
@@ -955,13 +950,13 @@ app.post('/login', async (req, res) => {
                     SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) as approved,
                     SUM(CASE WHEN status = 'PENDING_FINANCE' OR status = 'PENDING_HOD' OR status = 'PENDING_DIRECTOR' THEN 1 ELSE 0 END) as pending,
                     SUM(CASE WHEN status LIKE 'REJECTED%' THEN 1 ELSE 0 END) as rejected,
-                    SUM(grandTotal) as totalValue
+                    SUM("grandTotal") as totalValue
                 FROM requisitions 
                 GROUP BY department
                 ORDER BY totalValue DESC
             `);
             //  unique departments for filter
-            const [deptList] = await db.execute('SELECT DISTINCT department FROM requisitions WHERE department IS NOT NULL AND department != ""');
+            const [deptList] = await db.execute("SELECT DISTINCT department FROM requisitions WHERE department IS NOT NULL AND department != ''");
             const departments = deptList.map(d => d.department);
             
             // Parse pending requisitions 
@@ -1147,7 +1142,7 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
     try {
         //Requisitions pending director's approval
             const [pending] = await db.execute(
-                'SELECT * FROM requisitions WHERE status = "PENDING_DIRECTOR" ORDER BY requestDate DESC'
+                "SELECT * FROM requisitions WHERE status = 'PENDING_DIRECTOR' ORDER BY \"requestDate\" DESC"
             );
             const parsedPending = pending.map(r => parseRequisition(r));
         // 1. Get ALL approved requisitions for the table
@@ -1160,8 +1155,8 @@ app.get('/director/dashboard', isAuthenticated, authorize('director'), async (re
         // This is much faster than looping in JS
         const [deptRows] = await db.execute(`
             SELECT 
-                IFNULL(department, 'Uncategorized') as dept, 
-                SUM(grandTotal) as totalAmount, 
+                COALESCE(department, 'Uncategorized') as dept, 
+                SUM("grandTotal") as totalAmount, 
                 COUNT(*) as reqCount 
             FROM requisitions 
             WHERE status = 'APPROVED' 
