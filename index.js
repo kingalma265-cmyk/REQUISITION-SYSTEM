@@ -165,6 +165,20 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
             next();
         });
 
+        // DEBUG: Log session identity for troubleshooting role issues
+        app.use((req, res, next) => {
+            try {
+                if (req.session && req.session.userId) {
+                    console.log(`Session Debug — path=${req.path} userId=${req.session.userId} username=${req.session.username} role=${req.session.role} department=${req.session.department}`);
+                } else {
+                    console.log(`Session Debug — path=${req.path} no active session`);
+                }
+            } catch (e) {
+                console.warn('Session Debug Error:', e && e.message);
+            }
+            next();
+        });
+
 
         
     // ACCESS CONTROL MIDDLEWARE
@@ -180,14 +194,16 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
 //Authorize role
     const authorize = (role) => {
         return (req, res, next) => {
-            if (req.session && req.session.role === role) {
+            const sessionRole = (req.session && req.session.role) ? String(req.session.role).toLowerCase() : null;
+            const requiredRole = role ? String(role).toLowerCase() : null;
+            if (sessionRole && requiredRole && sessionRole === requiredRole) {
                 return next();
             }
             res.status(403).send(`
                 <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
                     <h1 style="color:#b91c1c;font-family:sans-serif;font-size:24px;">Access Denied!!</h1>
-                    <p>You do not have permission to view the ${role} dashboard.</p>
-                    <p>Your role: ${req.session?.role || 'Not logged in'}</p>
+                    <p>You do not have permission to view the ${requiredRole || role} dashboard.</p>
+                    <p>Your role: ${sessionRole || req.session?.role || 'Not logged in'}</p>
                     <a href="/">Go Back to Home</a>
                 </div>
             `);
@@ -195,7 +211,8 @@ const { sendNotification, sendPasswordResetEmail } = require('./utils/mailer');
     };
 
     function redirectToDashboard(role, res) {
-        switch(role) {
+        const r = role ? String(role).toLowerCase() : '';
+        switch(r) {
             case 'hod':
                 return res.redirect('/hod/dashboard');
             case 'finance':
@@ -270,7 +287,7 @@ app.post('/login', async (req, res) => {
                 .join(' ');
 
             req.session.userId = user.id;
-            req.session.role = user.role;
+            req.session.role = user.role ? String(user.role).toLowerCase() : user.role;
             
             // FIX: Explicitly save the lowercase username for database query consistency (e.g. "brian.wekesa")
             req.session.username = user.username; 
@@ -291,7 +308,7 @@ app.post('/login', async (req, res) => {
             
             const returnTo = req.session.returnTo || '/';
             delete req.session.returnTo;
-            return redirectToDashboard(user.role, res);
+            return redirectToDashboard(req.session.role, res);
         }
         
         console.log('❌ Invalid password');
@@ -674,7 +691,7 @@ app.post('/login', async (req, res) => {
 
         // 3. Database Insert
         const [insertRows] = await db.execute(
-            'INSERT INTO requisitions ("staffName", "requestDate", department, items, "grandTotal", status, history) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            'INSERT INTO requisitions (staffName, requestDate, department, items, grandTotal, status, history) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
                 staffName || req.session.username, 
                 requestDate || new Date(), 
@@ -686,7 +703,7 @@ app.post('/login', async (req, res) => {
             ]
         );
 
-        const requisitionId = insertRows[0].id;
+        const requisitionId = insertRows.insertId;
 
         // 4. Trigger Email
         try {
@@ -1060,7 +1077,7 @@ app.post('/finance/submit-approval/:id', isAuthenticated, authorize('finance'), 
                 u.email AS "requesterEmail", 
                 u.username AS "requesterName"
             FROM requisitions r 
-            LEFT JOIN users u ON r."staffName" = u.username 
+            LEFT JOIN users u ON r.staffName = u.username 
             WHERE r.id = ?`, [id]);
 
         if (rows.length === 0) return res.status(404).send("Requisition not found");
