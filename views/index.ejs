@@ -226,34 +226,21 @@
         </section>
     </div>
 
-    <% 
-        let visibleRequisitions = [];
-        if (typeof requisitions !== 'undefined' && requisitions !== null) {
-            const currentUser = (typeof user === 'object') ? user.username : user;
-            const currentRole = (typeof user === 'object' && user.role) ? user.role.toLowerCase() : '';
-            const currentDept = (typeof user === 'object' && user.department) ? user.department.toLowerCase() : '';
+    <%
+        // Staff always see only their own requisitions (already filtered server-side)
+        const visibleRequisitions = (typeof requisitions !== 'undefined' && requisitions !== null) ? requisitions : [];
 
-            visibleRequisitions = requisitions.filter(r => {
-                // 1. Everyone should always see their own requisitions
-                if (r.staffName === currentUser) return true;
-
-                // 2. Director or Admin sees everything
-                if (currentRole === 'director' || currentUser === 'brian') return true;
-
-                // 3. Finance: See all approved and rejected requisitions
-                if (currentRole === 'finance') {
-                    return r.status === 'APPROVED' || (r.status && r.status.includes('REJECTED'));
-                }
-
-                // 4. HOD: See requisitions from their department they have already approved or rejected
-                if (currentRole === 'hod') {
-                    return r.department && currentDept && 
-                           r.department.toLowerCase() === currentDept && 
-                           r.status !== 'PENDING_HOD';
-                }
-
-                return false;
-            });
+        function statusLabel(status) {
+            switch(status) {
+                case 'PENDING_HOD':      return { text: '⏳ Awaiting HOD Approval',          color: '#856404', bg: '#fff3cd' };
+                case 'PENDING_FINANCE':  return { text: '✅ HOD Approved → Awaiting Finance', color: '#0c5460', bg: '#d1ecf1' };
+                case 'PENDING_DIRECTOR': return { text: '📋 Finance Cleared → Awaiting Director', color: '#383d41', bg: '#e2e3e5' };
+                case 'APPROVED':         return { text: '🎉 Fully Approved',                  color: '#155724', bg: '#d4edda' };
+                case 'REJECTED_BY_HOD':  return { text: '❌ Rejected by HOD',                 color: '#721c24', bg: '#f8d7da' };
+                case 'REJECTED_BY_FINANCE': return { text: '❌ Rejected by Finance',          color: '#721c24', bg: '#f8d7da' };
+                case 'REJECTED_BY_DIRECTOR': return { text: '❌ Rejected by Director',        color: '#721c24', bg: '#f8d7da' };
+                default: return { text: status, color: '#333', bg: '#eee' };
+            }
         }
     %>
 
@@ -287,34 +274,29 @@
                                 <%= req.requestDate ? new Date(req.requestDate).toLocaleDateString() : 'N/A' %>
                             </td>
                             <td style="border: 1px solid #ddd; padding: 12px;">
-                                <% if (req.status && req.status.includes('REJECTED')) { %>
-                                    <span class="badge bg-danger">Rejected</span>
-                                <% } else if (req.status === 'APPROVED') { %>
-                                    <span class="badge bg-success">Approved</span>
-                                <% } else { %>
-                                    <span class="badge bg-warning"><%= req.status %></span>
-                                <% } %>
-
-                                <% 
+                                <%
+                                    const sl = statusLabel(req.status);
                                     let historyArr = Array.isArray(req.history) ? req.history : [];
-                                    let rejectionEntry = historyArr.find(h => 
+                                    let rejectionEntry = historyArr.find(h =>
                                         (h.action === 'Rejected') || (h.stage && h.stage.includes('Rejected'))
                                     );
                                 %>
-
-                                <% if (rejectionEntry) { %>
-                                    <div class="text-danger" style="font-size: 0.75rem; margin-top: 5px;">
+                                <span style="display:inline-block; padding: 5px 10px; border-radius: 5px; font-size: 0.85rem; font-weight: 600; background: <%= sl.bg %>; color: <%= sl.color %>;">
+                                    <%= sl.text %>
+                                </span>
+                                <% if (rejectionEntry && rejectionEntry.comments) { %>
+                                    <div style="font-size: 0.78rem; margin-top: 6px; color: #721c24;">
                                         <strong>Reason:</strong> <%= rejectionEntry.comments %>
                                     </div>
                                 <% } %>
                             </td>
-                                                <td style="border: 1px solid #ddd; padding: 12px;">
-                            <% if (req.status && (req.status.includes('REJECTED') || req.status === 'APPROVED')) { %>
-                                <a href="/requisition/view/<%= req.id %>" class="btn-review" style="background: #d9534f; color: white;">View Decision</a>
-                            <% } else { %>
-                                <a href="/requisition/view/<%= req.id %>" class="btn-review" style="background: #0071bc; color: white;">Track Progress</a>
-                            <% } %>
-                        </td>
+                            <td style="border: 1px solid #ddd; padding: 12px;">
+                                <% if (req.status && (req.status.includes('REJECTED') || req.status === 'APPROVED')) { %>
+                                    <a href="/requisition/view/<%= req.id %>" class="btn-review" style="background: #d9534f; color: white;">View Decision</a>
+                                <% } else { %>
+                                    <a href="/requisition/view/<%= req.id %>" class="btn-review" style="background: #0071bc; color: white;">Track Progress</a>
+                                <% } %>
+                            </td>
                             
                         </tr>
                     <% }) %>

@@ -597,11 +597,12 @@ app.post('/login', async (req, res) => {
     // STAFF ROUTES
     app.get('/home', isAuthenticated, async (req, res) => {
         try {
+            // Only fetch this user's own requisitions
             const [rows] = await db.execute(
-                'SELECT * FROM requisitions ORDER BY requestDate DESC LIMIT 50'
+                'SELECT * FROM requisitions WHERE "staffName" = ? ORDER BY "requestDate" DESC',
+                [req.session.username]
             );
             
-            // Parse JSON fields like history and items using existing helper
             const parsedRows = rows.map(r => parseRequisition(r));
             
             res.render('index', { 
