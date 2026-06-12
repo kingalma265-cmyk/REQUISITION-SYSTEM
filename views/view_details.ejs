@@ -28,19 +28,55 @@
 
         <tr>
             <th colspan="2" style="padding: 15px; background-color: #fcfcfc;">
-                <% 
-                    let statusColor = '#0071bc'; 
-                    if (requisition.status) {
-                        if (requisition.status.includes('APPROVED')) {
-                            statusColor = '#28a745'; 
-                        } else if (requisition.status.includes('REJECTED')) {
-                            statusColor = '#d9534f'; 
-                        }
-                    }
+                <%
+                    const statusMap = {
+                        'PENDING_HOD':      { text: '⏳ Awaiting HOD Approval',            color: '#856404', bg: '#fff3cd' },
+                        'PENDING_FINANCE':  { text: '✅ HOD Approved — Awaiting Finance',   color: '#0c5460', bg: '#d1ecf1' },
+                        'APPROVED':         { text: '🎉 Fully Approved',                    color: '#155724', bg: '#d4edda' },
+                        'REJECTED_BY_HOD':  { text: '❌ Rejected by HOD',                   color: '#721c24', bg: '#f8d7da' },
+                        'REJECTED_BY_FINANCE': { text: '❌ Rejected by Finance',            color: '#721c24', bg: '#f8d7da' },
+                        'REJECTED_BY_DIRECTOR': { text: '❌ Rejected by Director',          color: '#721c24', bg: '#f8d7da' }
+                    };
+                    const sl = statusMap[requisition.status] || { text: requisition.status, color: '#333', bg: '#eee' };
                 %>
-                <p style="font-size: 18px; margin: 0;">
-                    Status: <strong style="color: <%= statusColor %>;"><%= requisition.status %></strong>
-                </p>
+                <span style="display:inline-block; padding: 8px 18px; border-radius: 6px; font-size: 16px; font-weight: 700; background: <%= sl.bg %>; color: <%= sl.color %>;">
+                    <%= sl.text %>
+                </span>
+
+                <!-- Progress Steps -->
+                <div style="display:flex; align-items:center; gap:0; margin-top: 18px; justify-content:center; flex-wrap:wrap;">
+                    <%
+                        const steps = [
+                            { key: 'submitted', label: 'Submitted', statuses: ['PENDING_HOD','PENDING_FINANCE','APPROVED','REJECTED_BY_HOD','REJECTED_BY_FINANCE'] },
+                            { key: 'hod',       label: 'HOD Approved', statuses: ['PENDING_FINANCE','APPROVED','REJECTED_BY_FINANCE'] },
+                            { key: 'finance',   label: 'Finance Approved', statuses: ['APPROVED'] }
+                        ];
+                        const rejected = requisition.status && requisition.status.includes('REJECTED');
+                    %>
+                    <% steps.forEach((step, i) => {
+                        const done = step.statuses.includes(requisition.status);
+                        const isCurrent = (step.key === 'submitted' && requisition.status === 'PENDING_HOD') ||
+                                          (step.key === 'hod' && requisition.status === 'PENDING_FINANCE') ||
+                                          (step.key === 'finance' && requisition.status === 'APPROVED');
+                        const stepBg = done ? '#28a745' : '#ccc';
+                        const stepColor = done ? 'white' : '#666';
+                    %>
+                        <div style="display:flex; align-items:center;">
+                            <div style="text-align:center;">
+                                <div style="width:36px;height:36px;border-radius:50%;background:<%= stepBg %>;color:<%= stepColor %>;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:16px;margin:0 auto;">
+                                    <%= done ? '✓' : (i+1) %>
+                                </div>
+                                <div style="font-size:11px;margin-top:4px;color:<%= done ? '#28a745' : '#999' %>;font-weight:<%= done ? '600':'400' %>"><%= step.label %></div>
+                            </div>
+                            <% if (i < steps.length - 1) { %>
+                                <div style="width:60px;height:3px;background:<%= steps[i+1].statuses.includes(requisition.status) ? '#28a745' : '#ccc' %>;margin: 0 4px; margin-bottom:18px;"></div>
+                            <% } %>
+                        </div>
+                    <% }) %>
+                    <% if (rejected) { %>
+                        <div style="margin-top:8px; width:100%; font-size:13px; color:#721c24; font-weight:600;">⚠️ This requisition was rejected. See comments below.</div>
+                    <% } %>
+                </div>
             </th>
         </tr>
 
